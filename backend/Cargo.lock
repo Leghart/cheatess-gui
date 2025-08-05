@@ -280,6 +280,7 @@ dependencies = [
  "cheatess-core",
  "futures-util",
  "headers",
+ "once_cell",
  "serde",
  "serde_json",
  "tokio",
@@ -451,6 +452,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 [[package]]
 name = "cheatess-core"
 version = "0.1.0"
+source = "git+https://github.com/Leghart/cheatess-core?branch=develop#4e8593d64dccff38aaab7a86d695dee261147146"
 dependencies = [
  "clap",
  "clap-verbosity-flag",
