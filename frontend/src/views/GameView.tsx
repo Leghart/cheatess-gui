@@ -1,9 +1,17 @@
-interface Props {
-  exampleProp: string;
-}
+import ChessBoard from "@/components/mainView/ChessBoard";
+import LastMovesSideBar from "@/components/mainView/LastMovesSideBar";
 
-function GameView({ exampleProp }: Props) {
-  return <div>GameView {exampleProp}</div>;
+function GameView() {
+  return (
+    <div style={{ display: "flex" }}>
+      <div style={{ width: "80%" }}>
+        <ChessBoard />
+      </div>
+      <div style={{ width: "20%" }}>
+        <LastMovesSideBar />
+      </div>
+    </div>
+  );
 }
 
 export default GameView;

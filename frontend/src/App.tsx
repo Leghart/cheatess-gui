@@ -1,10 +1,12 @@
 import "./App.css";
 import GameView from "./views/GameView";
+import NavBar from "./components/misc/Navbar";
 
 function App() {
   return (
     <>
-      <GameView exampleProp="Test" />
+      <NavBar />
+      <GameView />
     </>
   );
 }
