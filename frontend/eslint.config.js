@@ -52,6 +52,7 @@ export default tseslint.config([
       "no-console": ["error", { allow: ["warn", "error"] }],
       "no-undefined": "error",
       "no-var": "error",
+      "@typescript-eslint/array-type": ["error", { default: "generic" }],
 
       "react/jsx-uses-react": "off",
       "react/react-in-jsx-scope": "off",

@@ -63,3 +63,10 @@ ol {
   padding-top: 16px;
   margin: 0px 0 32px 0;
 }
+
+.coordinates {
+  position: absolute;
+  user-select: none;
+  width: 800px;
+  height: 800px;
+}

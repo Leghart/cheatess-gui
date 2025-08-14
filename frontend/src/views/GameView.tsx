@@ -5,7 +5,7 @@ function GameView() {
   return (
     <div style={{ display: "flex" }}>
       <div style={{ width: "80%" }}>
-        <ChessBoard />
+        <ChessBoard firstMove="white" />
       </div>
       <div style={{ width: "20%" }}>
         <LastMovesSideBar />

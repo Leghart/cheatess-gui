@@ -1,34 +1,23 @@
-// Create array to map chessboard, then render html based on this array
-// Array will looks like [[{field: black/white, figureType: chessPiece},...], [{field: black/white, figureType: chessPiece},...}]]
-// Html will looks like:
-/**
- * <tbody>
- * for i in range(8):
- * <tr>
- *  for j in range(8):
- *    <td>
- *      <div background-color: array[i][j].field><img src="assets/chessPieces/array[i][j].figureType" /></div>
- *    </td>
- *  </tr>
- * </tbody>
- */
 import { useState } from "react";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
-function ChessBoard() {
+interface Props {
+  firstMove: string;
+}
+
+function ChessBoard(props: Props) {
   const initialPosition = [
     [
-      { field: "white", figureType: "br" },
-      { field: "black", figureType: "bn" },
-      { field: "white", figureType: "bb" },
-      { field: "black", figureType: "bq" },
-      { field: "white", figureType: "bk" },
-      { field: "black", figureType: "bb" },
-      { field: "white", figureType: "bn" },
       { field: "black", figureType: "br" },
+      { field: "white", figureType: "bn" },
+      { field: "black", figureType: "bb" },
+      { field: "white", figureType: "bq" },
+      { field: "black", figureType: "bk" },
+      { field: "white", figureType: "bb" },
+      { field: "black", figureType: "bn" },
+      { field: "white", figureType: "br" },
     ],
     [
-      { field: "black", figureType: "bp" },
       { field: "white", figureType: "bp" },
       { field: "black", figureType: "bp" },
       { field: "white", figureType: "bp" },
@@ -36,16 +25,7 @@ function ChessBoard() {
       { field: "white", figureType: "bp" },
       { field: "black", figureType: "bp" },
       { field: "white", figureType: "bp" },
-    ],
-    [
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
+      { field: "black", figureType: "bp" },
     ],
     [
       { field: "black", figureType: "" },
@@ -78,7 +58,16 @@ function ChessBoard() {
       { field: "white", figureType: "" },
     ],
     [
-      { field: "white", figureType: "wp" },
+      { field: "white", figureType: "" },
+      { field: "black", figureType: "" },
+      { field: "white", figureType: "" },
+      { field: "black", figureType: "" },
+      { field: "white", figureType: "" },
+      { field: "black", figureType: "" },
+      { field: "white", figureType: "" },
+      { field: "black", figureType: "" },
+    ],
+    [
       { field: "black", figureType: "wp" },
       { field: "white", figureType: "wp" },
       { field: "black", figureType: "wp" },
@@ -86,16 +75,17 @@ function ChessBoard() {
       { field: "black", figureType: "wp" },
       { field: "white", figureType: "wp" },
       { field: "black", figureType: "wp" },
+      { field: "white", figureType: "wp" },
     ],
     [
-      { field: "black", figureType: "wr" },
-      { field: "white", figureType: "wn" },
-      { field: "black", figureType: "wb" },
-      { field: "white", figureType: "wq" },
-      { field: "black", figureType: "wk" },
-      { field: "white", figureType: "wb" },
-      { field: "black", figureType: "wn" },
       { field: "white", figureType: "wr" },
+      { field: "black", figureType: "wn" },
+      { field: "white", figureType: "wb" },
+      { field: "black", figureType: "wq" },
+      { field: "white", figureType: "wk" },
+      { field: "black", figureType: "wb" },
+      { field: "white", figureType: "wn" },
+      { field: "black", figureType: "wr" },
     ],
   ];
 
@@ -138,21 +128,63 @@ function ChessBoard() {
     return listItems;
   };
 
+  const createCoordinates = () => {
+    const startPosition = {
+      letters: { x: 85, y: 795 },
+      numbers: { x: 2, y: 720 },
+    };
+
+    if (props.firstMove !== "white") {
+      startPosition.letters = { x: 785, y: 795 };
+      startPosition.numbers = { x: 2, y: 20 };
+    }
+
+    const numbers: Array<React.JSX.Element> = [];
+    const letters: Array<React.JSX.Element> = [];
+
+    [
+      [1, "a"],
+      [2, "b"],
+      [3, "c"],
+      [4, "d"],
+      [5, "e"],
+      [6, "f"],
+      [7, "g"],
+      [8, "h"],
+    ].forEach(([num, letter], index) => {
+      const calcNumY =
+        props.firstMove === "white"
+          ? startPosition.numbers.y - 100 * index
+          : startPosition.numbers.y + 100 * index;
+      const calcLetX =
+        props.firstMove === "white"
+          ? startPosition.letters.x + 100 * index
+          : startPosition.letters.x - 100 * index;
+
+      numbers.push(
+        <text x={startPosition.numbers.x} y={calcNumY} fontSize="20">
+          {num}
+        </text>
+      );
+      letters.push(
+        <text x={calcLetX} y={startPosition.letters.y} fontSize="20">
+          {letter}
+        </text>
+      );
+    });
+
+    return (
+      <svg className="coordinates" aria-hidden="true">
+        {...numbers}
+        {...letters}
+      </svg>
+    );
+  };
+
   return (
     <div className="chessBoardWrapper">
       <Table className="chessBoard" style={{ width: "800px" }}>
-        {/* <TableHeader>
-          <TableRow>
-            <TableHead className="text-center">A</TableHead>
-            <TableHead className="text-center">B</TableHead>
-            <TableHead className="text-center">C</TableHead>
-            <TableHead className="text-center">D</TableHead>
-            <TableHead className="text-center">E</TableHead>
-            <TableHead className="text-center">F</TableHead>
-            <TableHead className="text-center">G</TableHead>
-            <TableHead className="text-center">H</TableHead>
-          </TableRow>
-        </TableHeader> */}
+        {createCoordinates()}
         <TableBody>{createBody()}</TableBody>
       </Table>
     </div>

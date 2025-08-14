@@ -3,7 +3,7 @@ interface Props {
 }
 
 function SettingsForm({ exampleProp }: Props) {
-  <div>SettingsForm {exampleProp}</div>;
+  return <div>SettingsForm {exampleProp}</div>;
 }
 
 export default SettingsForm;
