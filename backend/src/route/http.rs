@@ -1,17 +1,36 @@
+use crate::route::AppState;
+use crate::wrappers;
+use crate::wrappers::args::CheatessArgsDto;
+use crate::wrappers::enums::ColorDto;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::{Json, response::IntoResponse};
 use cheatess_core::core::engine::{Color, DefaultPrinter, create_board_default};
 use cheatess_core::core::procimg;
 use cheatess_core::core::stockfish;
-use cheatess_core::utils::monitor;
+use serde::{Deserialize, Serialize};
 use serde_json;
 use serde_json::json;
+#[derive(Deserialize, Serialize)]
+pub struct InitBoardRequest {
+    color: wrappers::enums::ColorDto,
+}
 
-use crate::route::{AppState, BoardGrid};
-use crate::wrappers;
+#[derive(Deserialize, Serialize)]
+pub struct BoardResponse {
+    pub raw_data: [[char; 8]; 8],
+}
 
-pub async fn get_config_handler(State(state): State<AppState>) -> impl IntoResponse {
+#[derive(Deserialize, Serialize)]
+pub struct StockfishResponse {
+    pub version: String,
+    pub best_move: Option<String>,
+    pub eval: Option<String>,
+}
+
+pub async fn get_config_handler(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<CheatessArgsDto>) {
     let config_guard = state.config.lock().await;
 
     (StatusCode::OK, Json(config_guard.clone()))
@@ -20,7 +39,7 @@ pub async fn get_config_handler(State(state): State<AppState>) -> impl IntoRespo
 pub async fn patch_config_handler(
     State(state): State<AppState>,
     Json(partial): Json<wrappers::args::CheatessArgsDto>,
-) -> impl IntoResponse {
+) -> (StatusCode, Json<CheatessArgsDto>) {
     let mut config = state.config.lock().await;
 
     if let Some(verbose) = partial.verbose {
@@ -80,13 +99,100 @@ pub async fn patch_config_handler(
     (StatusCode::OK, Json(config.clone()))
 }
 
-pub async fn get_board_handler(State(_state): State<AppState>) -> impl IntoResponse {
-    let board = create_board_default::<DefaultPrinter>(&Color::Black);
-    let data = board.raw().map(|row| row.map(|c| c.to_string()));
-    Json(json!(BoardGrid { data }))
+// TODO: PoC: opt required
+// TODO: player color taken from payload, not auto detection
+pub async fn init(
+    State(state): State<AppState>,
+    Json(payload): Json<InitBoardRequest>,
+) -> impl IntoResponse {
+    let monitor_number: u8;
+    let proc_img_args: wrappers::args::ImgProcArgsDto;
+    {
+        let config_guard = state.config.lock().await;
+        monitor_number = config_guard.monitor.as_ref().unwrap().number.unwrap();
+        proc_img_args = config_guard.proc_image.as_ref().unwrap().clone();
+    }
+    let screen = wrappers::methods::capture_screen_as_mat(monitor_number).await;
+    let coords = wrappers::methods::get_coords(&screen).await;
+
+    {
+        let mut int_config = state.int_config.lock().await;
+        int_config.coords = Some(coords);
+    }
+
+    let sf = init_stockfish(State(state.clone()));
+    let brd = init_board(State(state.clone()), Json(payload));
+    // let pc = detect_player_color(State(state.clone()));
+
+    let (sf_result, brd_result) = tokio::join!(sf, brd);
+
+    let (sf_status, Json(sf_data)) = sf_result;
+    let (brd_status, Json(brd_data)) = brd_result;
+    // let (pc_status, Json(pc_data)) = pc_result;
+    let board = wrappers::methods::crop_board(&screen, coords).await;
+
+    let pieces = wrappers::methods::get_pieces(
+        &board,
+        proc_img_args.margin.unwrap(),
+        proc_img_args.extract_piece_threshold.unwrap(),
+        // pc_data.into(),
+        Color::White,
+    )
+    .await;
+
+    let mut sf_guard = state.stockfish.lock().await;
+    let best_move = sf_guard.as_mut().unwrap().get_best_move().unwrap();
+
+    let mut sf_data = sf_data;
+    sf_data.best_move = Some(best_move);
+    sf_data.eval = Some(sf_guard.as_mut().unwrap().get_evaluation());
+    //TODO
+    // save pieces
+    // init prev_board
+
+    if sf_status != StatusCode::OK || brd_status != StatusCode::CREATED {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(
+                json!({ "error": format!("Initialization failed: stockfish status ={:?} board status ={:?}",sf_status,brd_status) }),
+            ),
+        );
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "stockfish": sf_data,
+            "board": brd_data,
+        })),
+    )
 }
 
-pub async fn init_stockfish(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn init_board(
+    State(state): State<AppState>,
+    Json(payload): Json<InitBoardRequest>,
+) -> (StatusCode, Json<BoardResponse>) {
+    let mut int_config_guard = state.int_config.lock().await;
+    let color: Color = payload.color.into();
+
+    let board = create_board_default::<DefaultPrinter>(&color);
+    let raw_data = board.raw().clone();
+    int_config_guard.current_board = Some(board);
+
+    (StatusCode::CREATED, Json(BoardResponse { raw_data }))
+}
+
+pub async fn get_current_board(State(state): State<AppState>) -> impl IntoResponse {
+    let int_config_guard = state.int_config.lock().await;
+    let board = int_config_guard.current_board.as_ref().unwrap();
+    let data: [[String; 8]; 8] = board.raw().map(|row| row.map(|c| c.to_string()));
+
+    (StatusCode::OK, Json(json!({"data":data})))
+}
+
+pub async fn init_stockfish(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<StockfishResponse>) {
     let mut sf_guard = state.stockfish.lock().await;
     let config_guard = state.config.lock().await;
 
@@ -111,24 +217,26 @@ pub async fn init_stockfish(State(state): State<AppState>) -> impl IntoResponse 
         .unwrap()
         .set_config(&elo.to_string(), &skill.to_string(), &hash.to_string());
 
-    (StatusCode::OK, Json(json!({"version":version})))
-}
-
-pub async fn detect_player_color(State(state): State<AppState>) -> impl IntoResponse {
-    let config_guard = state.config.lock().await;
-    let monitor_number = config_guard.monitor.as_ref().unwrap().number.unwrap();
-
-    let monitor = monitor::select_monitor(monitor_number).expect("Requested monitor not found");
-    let raw = monitor::capture_entire_screen(&monitor);
-    let entire_screen_gray = procimg::image_buffer_to_gray_mat(&raw).unwrap();
-    let coords = procimg::get_board_region(&entire_screen_gray);
-
-    let cropped = procimg::crop_image(&raw, &coords);
-    let board = procimg::image_buffer_to_gray_mat(&cropped).unwrap();
-
-    let color = procimg::detect_player_color(&board);
     (
         StatusCode::OK,
-        Json(json!({"color":wrappers::enums::ColorDto::from(color)})),
+        Json(StockfishResponse {
+            version,
+            best_move: None,
+            eval: None,
+        }),
     )
+}
+
+pub async fn detect_player_color(State(state): State<AppState>) -> (StatusCode, Json<ColorDto>) {
+    let config_guard = state.config.lock().await;
+    let int_config_guard = state.int_config.lock().await;
+
+    let monitor_number = config_guard.monitor.as_ref().unwrap().number.unwrap();
+    let coords = int_config_guard.coords.unwrap();
+
+    let screen = wrappers::methods::capture_screen_as_mat(monitor_number).await;
+    let board = wrappers::methods::crop_board(&screen, coords).await;
+    let color = procimg::detect_player_color(&board);
+
+    (StatusCode::OK, Json(ColorDto::from(color)))
 }

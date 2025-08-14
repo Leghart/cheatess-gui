@@ -13,7 +13,8 @@ use tokio::sync::Mutex;
 
 mod route;
 mod wrappers;
-use route::{AppState, ENGINE_PATH};
+
+use route::{AppState, ENGINE_PATH, IntConfig};
 use wrappers::args;
 
 #[tokio::main]
@@ -23,6 +24,7 @@ async fn main() {
     let state = AppState {
         stockfish: Arc::new(Mutex::new(None)),
         config: Arc::new(Mutex::new(args::CheatessArgsDto::from(&args))),
+        int_config: Arc::new(Mutex::new(IntConfig::new())),
     };
 
     tracing_subscriber::registry()
@@ -36,11 +38,13 @@ async fn main() {
 
     let app = Router::new()
         .route("/game", any(route::ws::game_handler))
+        .route("/init", post(route::http::init))
+        .route("/init_board", post(route::http::init_board))
         .route("/init_stockfish", post(route::http::init_stockfish))
         .route("/player_color", get(route::http::detect_player_color))
         .route("/config", get(route::http::get_config_handler))
         .route("/config", patch(route::http::patch_config_handler))
-        .route("/board", get(route::http::get_board_handler))
+        .route("/board", get(route::http::get_current_board))
         .with_state(state)
         .layer(
             TraceLayer::new_for_http()
