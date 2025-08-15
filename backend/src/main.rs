@@ -19,11 +19,10 @@ use wrappers::args;
 
 #[tokio::main]
 async fn main() {
-    let env_args = vec!["target/debug/backend", "stockfish", "-p", ENGINE_PATH];
-    let args = parse_args_from(env_args);
+    let args = parse_args_from(vec!["target/debug/backend", "stockfish", "-p", ENGINE_PATH]);
     let state = AppState {
         stockfish: Arc::new(Mutex::new(None)),
-        config: Arc::new(Mutex::new(args::CheatessArgsDto::from(&args))),
+        ext_config: Arc::new(Mutex::new(args::CheatessArgsDto::from(&args))),
         int_config: Arc::new(Mutex::new(IntConfig::new())),
     };
 
@@ -39,21 +38,25 @@ async fn main() {
     let app = Router::new()
         .route("/game", any(route::ws::game_handler))
         .route("/init", post(route::http::init))
-        .route("/init_board", post(route::http::init_board))
-        .route("/init_stockfish", post(route::http::init_stockfish))
-        .route("/player_color", get(route::http::detect_player_color))
-        .route("/config", get(route::http::get_config_handler))
-        .route("/config", patch(route::http::patch_config_handler))
-        .route("/board", get(route::http::get_current_board))
+        .route("/int_config", get(route::http::get_int_config))
+        .route("/ext_config", get(route::http::get_ext_config))
+        .route("/ext_config", patch(route::http::update_ext_config))
+        .route("/board", get(route::http::get_prev_board))
         .with_state(state)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
         );
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await
-        .unwrap();
+    let addr = match std::env::var("ADDR") {
+        Ok(val) => val,
+        Err(_) => {
+            let default_url = "127.0.0.1:3000";
+            eprintln!("Not found `URL` env variable. Using default {default_url}");
+            default_url.to_string()
+        }
+    };
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
     axum::serve(
         listener,
