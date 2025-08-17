@@ -1,0 +1,47 @@
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+
+name: Backend
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    container:
+      image: leghart/cheatess-test:latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: cargo check
+        working-directory: ./backend
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    container:
+      image: leghart/cheatess-test:latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: cargo test
+        working-directory: ./backend
+
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    container:
+      image: leghart/cheatess-test:latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: cargo fmt --all -- --check
+        working-directory: ./backend
+
+  clippy:
+    name: Lint
+    runs-on: ubuntu-latest
+    container:
+      image: leghart/cheatess-test:latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: cargo clippy -- -D warnings
+        working-directory: ./backend
