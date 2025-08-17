@@ -16,3 +16,12 @@ impl From<Color> for ColorDto {
         }
     }
 }
+
+impl From<ColorDto> for Color {
+    fn from(color: ColorDto) -> Self {
+        match color {
+            ColorDto::White => Color::White,
+            ColorDto::Black => Color::Black,
+        }
+    }
+}

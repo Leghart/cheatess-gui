@@ -4,25 +4,27 @@ use axum::{
 };
 use cheatess_core::utils::parser::parse_args_from;
 
+use http::{HeaderValue, Method, header::CONTENT_TYPE};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::sync::Mutex;
+use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use tokio::sync::Mutex;
-
 mod route;
 mod wrappers;
-use route::{AppState, ENGINE_PATH};
+
+use route::{AppState, ENGINE_PATH, IntConfig};
 use wrappers::args;
 
 #[tokio::main]
 async fn main() {
-    let env_args = vec!["target/debug/backend", "stockfish", "-p", ENGINE_PATH];
-    let args = parse_args_from(env_args);
+    let args = parse_args_from(vec!["target/debug/backend", "stockfish", "-p", ENGINE_PATH]);
     let state = AppState {
         stockfish: Arc::new(Mutex::new(None)),
-        config: Arc::new(Mutex::new(args::CheatessArgsDto::from(&args))),
+        ext_config: Arc::new(Mutex::new(args::CheatessArgsDto::from(&args))),
+        int_config: Arc::new(Mutex::new(IntConfig::new())),
     };
 
     tracing_subscriber::registry()
@@ -34,20 +36,33 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let cors = CorsLayer::new()
+        .allow_origin("http://localhost:8080".parse::<HeaderValue>().unwrap())
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([CONTENT_TYPE]);
+
     let app = Router::new()
         .route("/game", any(route::ws::game_handler))
-        .route("/init_stockfish", post(route::http::init_stockfish))
-        .route("/player_color", get(route::http::detect_player_color))
-        .route("/config", get(route::http::get_config_handler))
-        .route("/config", patch(route::http::patch_config_handler))
-        .route("/board", get(route::http::get_board_handler))
+        .route("/init", post(route::http::init))
+        .route("/int_config", get(route::http::get_int_config))
+        .route("/ext_config", get(route::http::get_ext_config))
+        .route("/ext_config", patch(route::http::update_ext_config))
+        .route("/board", get(route::http::get_prev_board))
         .with_state(state)
+        .layer(cors)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
         );
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+    // let port = match std::env::var("PORT") {
+    //     Ok(val) => val,
+    //     Err(_) => {
+    //         panic!("Not found `PORT` env variable.");
+    //     }
+    // };
+    let port = "3000";
+    let listener = tokio::net::TcpListener::bind(&format!("127.0.0.1:{port}"))
         .await
         .unwrap();
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
