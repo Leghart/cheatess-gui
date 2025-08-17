@@ -6,7 +6,6 @@ use std::sync::Arc;
 use crate::wrappers::{args, enums::ColorDto};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-pub const ENGINE_PATH: &str = "/home/leghart/projects/cheatess/stockfish-ubuntu-x86-64-avx2";
 
 #[derive(Clone)]
 pub struct AppState {
