@@ -7,53 +7,41 @@ name: Backend
 
 jobs:
   check:
-    name: Cargo check
+    name: Check
     runs-on: ubuntu-latest
+    container:
+      image: leghart/cheatess-test:latest
     steps:
       - uses: actions/checkout@v2
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
       - run: cargo check
         working-directory: ./backend
 
   test:
-    name: Cargo test
+    name: Tests
     runs-on: ubuntu-latest
+    container:
+      image: leghart/cheatess-test:latest
     steps:
       - uses: actions/checkout@v2
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
       - run: cargo test
         working-directory: ./backend
 
   fmt:
-    name: Cargo format
+    name: Format
     runs-on: ubuntu-latest
+    container:
+      image: leghart/cheatess-test:latest
     steps:
       - uses: actions/checkout@v2
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
       - run: cargo fmt --all -- --check
         working-directory: ./backend
 
   clippy:
-    name: Cargo clippy
+    name: Lint
     runs-on: ubuntu-latest
+    container:
+      image: leghart/cheatess-test:latest
     steps:
       - uses: actions/checkout@v2
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo clippy -- -D warnings
         working-directory: ./backend
