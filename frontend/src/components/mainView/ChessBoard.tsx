@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
 interface Props {
   firstMove: string;
 }
 
-function ChessBoard(props: Props) {
+function ChessBoard({ firstMove }: Props) {
   const initialPosition = [
     [
       { field: "black", figureType: "br" },
@@ -134,7 +134,7 @@ function ChessBoard(props: Props) {
       numbers: { x: 2, y: 720 },
     };
 
-    if (props.firstMove !== "white") {
+    if (firstMove !== "white") {
       startPosition.letters = { x: 785, y: 795 };
       startPosition.numbers = { x: 2, y: 20 };
     }
@@ -153,11 +153,11 @@ function ChessBoard(props: Props) {
       [8, "h"],
     ].forEach(([num, letter], index) => {
       const calcNumY =
-        props.firstMove === "white"
+        firstMove === "white"
           ? startPosition.numbers.y - 100 * index
           : startPosition.numbers.y + 100 * index;
       const calcLetX =
-        props.firstMove === "white"
+        firstMove === "white"
           ? startPosition.letters.x + 100 * index
           : startPosition.letters.x - 100 * index;
 
