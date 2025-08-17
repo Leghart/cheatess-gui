@@ -192,7 +192,7 @@ async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<Stoc
 
     let version: String;
     if sf_guard.is_none() {
-        let path = std::path::PathBuf::from(crate::route::ENGINE_PATH);
+        let path = std::path::PathBuf::from(std::env::var("ENGINE_PATH").unwrap());
         let depth = 5;
 
         let sf = stockfish::Stockfish::new(&path, depth);
