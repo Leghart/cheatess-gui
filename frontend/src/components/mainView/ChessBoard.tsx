@@ -1,97 +1,16 @@
-import { useEffect, useState } from "react";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
 interface Props {
   firstMove: string;
+  currentPosition: Array<Array<{ field: string; figureType: string }>>;
 }
 
-function ChessBoard({ firstMove }: Props) {
-  const initialPosition = [
-    [
-      { field: "black", figureType: "br" },
-      { field: "white", figureType: "bn" },
-      { field: "black", figureType: "bb" },
-      { field: "white", figureType: "bq" },
-      { field: "black", figureType: "bk" },
-      { field: "white", figureType: "bb" },
-      { field: "black", figureType: "bn" },
-      { field: "white", figureType: "br" },
-    ],
-    [
-      { field: "white", figureType: "bp" },
-      { field: "black", figureType: "bp" },
-      { field: "white", figureType: "bp" },
-      { field: "black", figureType: "bp" },
-      { field: "white", figureType: "bp" },
-      { field: "black", figureType: "bp" },
-      { field: "white", figureType: "bp" },
-      { field: "black", figureType: "bp" },
-    ],
-    [
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-    ],
-    [
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-    ],
-    [
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-    ],
-    [
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-      { field: "white", figureType: "" },
-      { field: "black", figureType: "" },
-    ],
-    [
-      { field: "black", figureType: "wp" },
-      { field: "white", figureType: "wp" },
-      { field: "black", figureType: "wp" },
-      { field: "white", figureType: "wp" },
-      { field: "black", figureType: "wp" },
-      { field: "white", figureType: "wp" },
-      { field: "black", figureType: "wp" },
-      { field: "white", figureType: "wp" },
-    ],
-    [
-      { field: "white", figureType: "wr" },
-      { field: "black", figureType: "wn" },
-      { field: "white", figureType: "wb" },
-      { field: "black", figureType: "wq" },
-      { field: "white", figureType: "wk" },
-      { field: "black", figureType: "wb" },
-      { field: "white", figureType: "wn" },
-      { field: "black", figureType: "wr" },
-    ],
-  ];
-
-  const [currentPosition, setCurrentPosition] = useState(initialPosition);
-
+function ChessBoard({ firstMove, currentPosition }: Props) {
   const createRow = (row: number) => {
+    if (!currentPosition) {
+      return;
+    }
+
     const listItems = [];
 
     for (let col = 0; col < 8; col++) {
@@ -105,7 +24,7 @@ function ChessBoard({ firstMove }: Props) {
                 : "#769656",
           }}
         >
-          {currentPosition[row][col].figureType && (
+          {currentPosition[row][col].figureType !== " " && (
             <img
               style={{ margin: "auto" }}
               src={`src/assets/pieces/${currentPosition[row][col].figureType}.png`}
