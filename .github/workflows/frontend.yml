@@ -1,0 +1,51 @@
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+
+name: Frontend
+
+jobs:
+  eslint:
+    name: Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: yarn install --dev
+
+      - name: Run ESLint
+        run: yarn lint
+
+  prettier:
+    name: Format
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: yarn install --dev
+
+      - name: Run Prettier
+        run: yarn format

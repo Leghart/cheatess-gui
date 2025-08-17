@@ -1,9 +1,0 @@
-{
-  "trailingComma": "es5",
-  "tabWidth": 4,
-  "semi": false,
-  "singleQuote": false,
-  "useTabs": true,
-  "bracketSpacing": true,
-  "parser": "typescript"
-}

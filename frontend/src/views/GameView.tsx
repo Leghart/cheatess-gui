@@ -58,6 +58,7 @@ function GameView() {
           console.error(err);
         });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -74,6 +75,7 @@ function GameView() {
     });
 
     return () => socket.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -87,7 +89,11 @@ function GameView() {
         )}
       </div>
       <div style={{ width: "20%" }}>
-        <LastMovesSideBar firstColorMove={firstColorMove} moves={moves} />
+        <LastMovesSideBar
+          firstColorMove={firstColorMove}
+          moves={moves}
+          currentPosition={currentPosition}
+        />
       </div>
     </div>
   );
