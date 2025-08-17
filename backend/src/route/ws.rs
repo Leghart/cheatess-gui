@@ -59,7 +59,7 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
     }
 
     if let Some(Err(e)) = socket.recv().await {
-        eprintln!("client abruptly disconnected {}", e);
+        eprintln!("client abruptly disconnected {e}");
         return;
     }
 
