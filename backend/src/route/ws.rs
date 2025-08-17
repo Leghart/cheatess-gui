@@ -9,13 +9,39 @@ use axum::{
 use cheatess_core::engine::Color;
 use cheatess_core::monitor::Monitor;
 use futures_util::SinkExt;
+use futures_util::stream::SplitSink;
 use futures_util::stream::StreamExt;
+use serde::Deserialize;
+use serde::Serialize;
 
 pub async fn game_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| start_game(socket, axum::extract::State(state)))
+}
+
+async fn send(sender: &mut SplitSink<WebSocket, Message>, msg: WsResponse) {
+    let json = serde_json::to_string(&msg).unwrap();
+    match sender.send(json.into()).await {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("WebSocketResponse error: {e}");
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+enum WsResponse {
+    GameOver,
+    NextMove(CorrectMove),
+}
+
+#[derive(Serialize, Deserialize)]
+struct CorrectMove {
+    best_move: String,
+    eval: String,
+    raw_board: [[char; 8]; 8],
 }
 
 pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
@@ -39,7 +65,7 @@ pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
 
     let (mut sender, _receiver) = socket.split();
 
-    let _send_task = tokio::spawn(async move {
+    tokio::spawn(async move {
         let monitor_number: u8;
         let piece_threshold: f64;
         let board_threshold: f64;
@@ -78,10 +104,6 @@ pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                 .difference_level
                 .unwrap();
         }
-        sender
-            .send(Message::Text("game started".into()))
-            .await
-            .unwrap();
 
         loop {
             let prev_mat: cheatess_core::procimg::Mat;
@@ -132,17 +154,20 @@ pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                 let mut stockfish = state.stockfish.lock().await;
                 let sf_best_move = stockfish.as_mut().unwrap().get_best_move();
                 match sf_best_move {
-                    Some(best) => {
-                        sender
-                            .send(Message::Text(format!("Stockfish best move: {best}").into()))
-                            .await
-                            .unwrap();
+                    Some(best_move) => {
+                        let eval = stockfish.as_mut().unwrap().get_evaluation();
+                        send(
+                            &mut sender,
+                            WsResponse::NextMove(CorrectMove {
+                                best_move,
+                                eval,
+                                raw_board: *current_board.raw(),
+                            }),
+                        )
+                        .await;
                     }
                     None => {
-                        sender
-                            .send(Message::Text("Game over".into()))
-                            .await
-                            .unwrap();
+                        send(&mut sender, WsResponse::GameOver).await;
                         break;
                     }
                 };
@@ -152,7 +177,5 @@ pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
             int_config.prev_board = Some(*current_board.raw());
             int_config.prev_board_mat = Some(gray_board);
         }
-
-        "Finished".to_string()
     });
 }
