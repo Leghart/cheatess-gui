@@ -280,6 +280,7 @@ dependencies = [
  "cheatess-core",
  "futures-util",
  "headers",
+ "http",
  "once_cell",
  "serde",
  "serde_json",

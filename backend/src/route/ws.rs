@@ -39,7 +39,7 @@ pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
 
     let (mut sender, _receiver) = socket.split();
 
-    let send_task = tokio::spawn(async move {
+    let _send_task = tokio::spawn(async move {
         let monitor_number: u8;
         let piece_threshold: f64;
         let board_threshold: f64;
@@ -109,7 +109,7 @@ pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                 board_threshold,
             );
 
-            let (mv, mv_type) = {
+            let (mv, _mv_type) = {
                 match cheatess_core::core::engine::detect_move(
                     &prev_board,
                     &new_raw_board,

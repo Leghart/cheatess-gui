@@ -4,12 +4,13 @@ use axum::{
 };
 use cheatess_core::utils::parser::parse_args_from;
 
+use http::{HeaderValue, Method, header::CONTENT_TYPE};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::sync::Mutex;
+use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-use tokio::sync::Mutex;
 
 mod route;
 mod wrappers;
@@ -35,6 +36,11 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let cors = CorsLayer::new()
+        .allow_origin("http://localhost:8080".parse::<HeaderValue>().unwrap())
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([CONTENT_TYPE]);
+
     let app = Router::new()
         .route("/game", any(route::ws::game_handler))
         .route("/init", post(route::http::init))
@@ -43,20 +49,21 @@ async fn main() {
         .route("/ext_config", patch(route::http::update_ext_config))
         .route("/board", get(route::http::get_prev_board))
         .with_state(state)
+        .layer(cors)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
         );
 
-    let addr = match std::env::var("ADDR") {
+    let port = match std::env::var("PORT") {
         Ok(val) => val,
         Err(_) => {
-            let default_url = "127.0.0.1:3000";
-            eprintln!("Not found `URL` env variable. Using default {default_url}");
-            default_url.to_string()
+            panic!("Not found `PORT` env variable.");
         }
     };
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&format!("http://127.0.0.1:{port}"))
+        .await
+        .unwrap();
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
     axum::serve(
         listener,
