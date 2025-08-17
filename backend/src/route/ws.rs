@@ -2,6 +2,7 @@ use crate::AppState;
 use crate::wrappers;
 use axum::extract::State;
 use axum::response::IntoResponse;
+use axum::{Router, routing::any};
 use axum::{
     body::Bytes,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
@@ -14,10 +15,11 @@ use futures_util::stream::StreamExt;
 use serde::Deserialize;
 use serde::Serialize;
 
-pub async fn game_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub fn router() -> Router<AppState> {
+    Router::new().route("/game", any(game_handler))
+}
+
+async fn game_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| start_game(socket, axum::extract::State(state)))
 }
 
@@ -34,7 +36,7 @@ async fn send(sender: &mut SplitSink<WebSocket, Message>, msg: WsResponse) {
 #[derive(Serialize, Deserialize)]
 enum WsResponse {
     GameOver,
-    NextMove(CorrectMove),
+    NextMove(Box<CorrectMove>),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -44,7 +46,7 @@ struct CorrectMove {
     raw_board: [[char; 8]; 8],
 }
 
-pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
+async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
     if socket
         .send(Message::Ping(Bytes::from_static(&[1])))
         .await
@@ -56,11 +58,9 @@ pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
         return;
     }
 
-    if let Some(msg) = socket.recv().await {
-        if let Err(e) = msg {
-            println!("client abruptly disconnected {}", e);
-            return;
-        }
+    if let Some(Err(e)) = socket.recv().await {
+        eprintln!("client abruptly disconnected {}", e);
+        return;
     }
 
     let (mut sender, _receiver) = socket.split();
@@ -78,25 +78,29 @@ pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
             let ext_config = state.ext_config.lock().await;
             let int_config = state.int_config.lock().await;
 
+            coords = int_config.coords.unwrap();
+            pieces = int_config.pieces.clone().unwrap();
+
+            let tmp: Option<Color> = int_config.color.map(Into::into);
+            player_color = tmp.unwrap();
+
             monitor_number = ext_config.monitor.as_ref().unwrap().number.unwrap();
+            monitor = wrappers::methods::get_monitor(monitor_number).await;
+
             piece_threshold = ext_config
                 .proc_image
                 .as_ref()
                 .unwrap()
                 .piece_threshold
                 .unwrap();
+
             board_threshold = ext_config
                 .proc_image
                 .as_ref()
                 .unwrap()
                 .board_threshold
                 .unwrap();
-            pieces = int_config.pieces.clone().unwrap();
-            let tmp: Option<Color> = int_config.color.map(Into::into);
-            player_color = tmp.unwrap();
 
-            monitor = wrappers::methods::get_monitor(monitor_number).await;
-            coords = int_config.coords.unwrap();
             diff_level = ext_config
                 .proc_image
                 .as_ref()
@@ -111,7 +115,7 @@ pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
             {
                 let int_config = state.int_config.lock().await;
                 prev_mat = int_config.prev_board_mat.clone().unwrap();
-                prev_board = int_config.prev_board.clone().unwrap();
+                prev_board = int_config.prev_board.unwrap();
             }
 
             let cropped = cheatess_core::utils::monitor::get_cropped_screen(
@@ -158,11 +162,11 @@ pub async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                         let eval = stockfish.as_mut().unwrap().get_evaluation();
                         send(
                             &mut sender,
-                            WsResponse::NextMove(CorrectMove {
+                            WsResponse::NextMove(Box::new(CorrectMove {
                                 best_move,
                                 eval,
                                 raw_board: *current_board.raw(),
-                            }),
+                            })),
                         )
                         .await;
                     }

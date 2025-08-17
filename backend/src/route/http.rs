@@ -1,17 +1,20 @@
 use crate::route::{AppState, IntConfig};
-use crate::wrappers;
-use crate::wrappers::args::CheatessArgsDto;
-use crate::wrappers::enums::ColorDto;
-use axum::extract::State;
-use axum::http::StatusCode;
-use axum::{Json, response::IntoResponse};
-use cheatess_core::core::engine::{DefaultPrinter, create_board_default};
-use cheatess_core::core::procimg;
-use cheatess_core::core::stockfish;
+use crate::wrappers::{self, args::CheatessArgsDto, enums::ColorDto};
+use axum::{
+    Json, Router,
+    extract::State,
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, patch, post},
+};
+use cheatess_core::core::{
+    engine::{DefaultPrinter, create_board_default},
+    procimg, stockfish,
+};
 use serde::{Deserialize, Serialize};
-use serde_json;
-use serde_json::json;
+use serde_json::{self, json};
 use std::sync::Arc;
+
 #[derive(Deserialize, Serialize)]
 pub struct InitBoardRequest {
     color: wrappers::enums::ColorDto,
@@ -29,15 +32,24 @@ pub struct StockfishResponse {
     pub eval: Option<String>,
 }
 
-pub async fn get_int_config(State(state): State<AppState>) -> (StatusCode, Json<IntConfig>) {
+pub fn router() -> Router<AppState> {
+    Router::new()
+        .route("/init", post(init))
+        .route("/int_config", get(get_int_config))
+        .route("/ext_config", get(get_ext_config))
+        .route("/ext_config", patch(update_ext_config))
+        .route("/board", get(get_prev_board))
+}
+
+async fn get_int_config(State(state): State<AppState>) -> (StatusCode, Json<IntConfig>) {
     (StatusCode::OK, Json(state.int_config.lock().await.clone()))
 }
 
-pub async fn get_ext_config(State(state): State<AppState>) -> (StatusCode, Json<CheatessArgsDto>) {
+async fn get_ext_config(State(state): State<AppState>) -> (StatusCode, Json<CheatessArgsDto>) {
     (StatusCode::OK, Json(state.ext_config.lock().await.clone()))
 }
 
-pub async fn update_ext_config(
+async fn update_ext_config(
     State(state): State<AppState>,
     Json(partial): Json<wrappers::args::CheatessArgsDto>,
 ) -> (StatusCode, Json<CheatessArgsDto>) {
@@ -100,8 +112,7 @@ pub async fn update_ext_config(
     (StatusCode::OK, Json(ext_config.clone()))
 }
 
-// TODO: PoC: opt required
-pub async fn init(State(state): State<AppState>) -> impl IntoResponse {
+async fn init(State(state): State<AppState>) -> impl IntoResponse {
     let monitor_number: u8;
     let proc_img_args: wrappers::args::ImgProcArgsDto;
     {
@@ -166,19 +177,16 @@ pub async fn init(State(state): State<AppState>) -> impl IntoResponse {
     )
 }
 
-pub async fn get_prev_board(State(state): State<AppState>) -> (StatusCode, Json<RawBoardResponse>) {
+async fn get_prev_board(State(state): State<AppState>) -> (StatusCode, Json<RawBoardResponse>) {
     let int_config_guard = state.int_config.lock().await;
     let raw_data = int_config_guard
         .prev_board
-        .clone()
         .expect("Board hasn't been created yet.");
 
     (StatusCode::OK, Json(RawBoardResponse { raw_data }))
 }
 
-pub async fn init_stockfish(
-    State(state): State<AppState>,
-) -> (StatusCode, Json<StockfishResponse>) {
+async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<StockfishResponse>) {
     let mut sf_guard = state.stockfish.lock().await;
     let ext_config_guard = state.ext_config.lock().await;
 

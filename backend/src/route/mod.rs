@@ -42,9 +42,9 @@ impl IntConfig {
 impl Clone for IntConfig {
     fn clone(&self) -> Self {
         IntConfig {
-            coords: self.coords.clone(),
-            prev_board: self.prev_board.clone(),
-            color: self.color.clone(),
+            coords: self.coords,
+            prev_board: self.prev_board,
+            color: self.color,
             prev_board_mat: None,
             pieces: None,
         }
