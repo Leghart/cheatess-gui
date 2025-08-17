@@ -55,13 +55,14 @@ async fn main() {
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
         );
 
-    let port = match std::env::var("PORT") {
-        Ok(val) => val,
-        Err(_) => {
-            panic!("Not found `PORT` env variable.");
-        }
-    };
-    let listener = tokio::net::TcpListener::bind(&format!("http://127.0.0.1:{port}"))
+    // let port = match std::env::var("PORT") {
+    //     Ok(val) => val,
+    //     Err(_) => {
+    //         panic!("Not found `PORT` env variable.");
+    //     }
+    // };
+    let port = "3000";
+    let listener = tokio::net::TcpListener::bind(&format!("127.0.0.1:{port}"))
         .await
         .unwrap();
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
