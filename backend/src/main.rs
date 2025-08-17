@@ -27,7 +27,12 @@ async fn main() {
     let fe_port =
         std::env::var("FRONTEND_PORT").expect("Missing 'FRONTEND_PORT' env variable in .env");
 
-    let args = parse_args_from(vec!["target/debug/backend", "stockfish", "-p", &std::env::var("ENGINE_PATH").unwrap()]);
+    let args = parse_args_from(vec![
+        "target/debug/backend",
+        "stockfish",
+        "-p",
+        &std::env::var("ENGINE_PATH").unwrap(),
+    ]);
 
     tracing_subscriber::registry()
         .with(
