@@ -18,15 +18,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = "1.0.219"
 serde_json = "1.0.142"
 http = "1.3.1"
+dotenvy = "0.15.7"
 
 [dev-dependencies]
 rstest = "0.24.0"
 clippy = "0.0.302"
-
-[profile.dev]
-codegen-units = 256
-incremental = true
-opt-level = 0
 
 [profile.release]
 codegen-units = 1

@@ -19,19 +19,13 @@ use wrappers::args;
 
 #[tokio::main]
 async fn main() {
-    let be_port = match std::env::var("BACKEND_PORT") {
-        Ok(val) => val,
-        Err(_) => {
-            panic!("Not found `BACKEND_PORT` env variable.");
-        }
-    };
+    dotenvy::dotenv().ok();
 
-    let fe_port = match std::env::var("FRONTEND_PORT") {
-        Ok(val) => val,
-        Err(_) => {
-            panic!("Not found `FRONTEND_PORT` env variable.");
-        }
-    };
+    let be_port =
+        std::env::var("BACKEND_PORT").expect("Missing 'BACKEND_PORT' env variable in .env");
+
+    let fe_port =
+        std::env::var("FRONTEND_PORT").expect("Missing 'FRONTEND_PORT' env variable in .env");
 
     let args = parse_args_from(vec!["target/debug/backend", "stockfish", "-p", ENGINE_PATH]);
 

@@ -17,6 +17,7 @@ jobs:
           components: clippy, rustfmt
 
       - run: cargo check
+        working-directory: ./backend
 
   test:
     name: Cargo test
@@ -29,6 +30,7 @@ jobs:
           components: clippy, rustfmt
 
       - run: cargo test
+        working-directory: ./backend
 
   fmt:
     name: Cargo format
@@ -41,6 +43,7 @@ jobs:
           components: rustfmt
 
       - run: cargo fmt --all -- --check
+        working-directory: ./backend
 
   clippy:
     name: Cargo clippy
@@ -53,3 +56,4 @@ jobs:
           components: clippy
 
       - run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: ./backend
