@@ -41,6 +41,7 @@ enum WsResponse {
 
 #[derive(Serialize, Deserialize)]
 struct CorrectMove {
+    last_move: Option<String>,
     best_move: String,
     eval: String,
     raw_board: [[char; 8]; 8],
@@ -109,6 +110,7 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                 .unwrap();
         }
 
+        let mut last_move: Option<String>;
         loop {
             let prev_mat: cheatess_core::procimg::Mat;
             let prev_board: [[char; 8]; 8];
@@ -145,6 +147,9 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                     Err(_) => continue,
                 }
             };
+
+            last_move = Some(mv.clone());
+
             {
                 let mut stockfish = state.stockfish.lock().await;
                 stockfish.as_mut().unwrap().make_move(vec![mv]);
@@ -163,6 +168,7 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                         send(
                             &mut sender,
                             WsResponse::NextMove(Box::new(CorrectMove {
+                                last_move,
                                 best_move,
                                 eval,
                                 raw_board: *current_board.raw(),
