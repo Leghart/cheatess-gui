@@ -465,13 +465,14 @@ dependencies = [
 [[package]]
 name = "cheatess-core"
 version = "0.1.0"
-source = "git+https://github.com/Leghart/cheatess-core?branch=develop#cca44d2538463d51339f5f36dbd50db51c026a72"
+source = "git+https://github.com/Leghart/cheatess-core?branch=develop#477989a4403e2b0b0a25e131a83a893cfd7ac1f7"
 dependencies = [
  "clap",
  "clap-verbosity-flag",
  "image",
  "log",
  "opencv",
+ "regex",
  "subprocess",
  "text-colorizer",
  "xcap",

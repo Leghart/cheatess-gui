@@ -32,6 +32,8 @@ async fn main() {
         "stockfish",
         "-p",
         &std::env::var("ENGINE_PATH").unwrap(),
+        "--pv",
+        "3",
     ]);
 
     tracing_subscriber::registry()
