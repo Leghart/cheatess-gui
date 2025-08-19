@@ -61,11 +61,10 @@ async fn update_ext_config(
     if let Some(mode) = partial.mode {
         ext_config.mode = Some(mode);
     }
-    if let Some(monitor) = partial.monitor {
-        if let Some(number) = monitor.number {
-            ext_config.monitor.get_or_insert(Default::default()).number = Some(number);
-        }
+    if let Some(number) = partial.monitor.and_then(|m| m.number) {
+        ext_config.monitor.get_or_insert(Default::default()).number = Some(number);
     }
+
     if let Some(stockfish) = partial.stockfish {
         let s = ext_config.stockfish.get_or_insert(Default::default());
         if let Some(path) = stockfish.path {
