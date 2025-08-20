@@ -28,7 +28,7 @@ async fn game_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> im
 }
 
 async fn collect_logs_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| get_logs(socket))
+    ws.on_upgrade(get_logs)
 }
 
 async fn send(sender: &mut SplitSink<WebSocket, Message>, msg: WsResponse) {
