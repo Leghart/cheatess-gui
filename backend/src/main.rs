@@ -9,7 +9,6 @@ use tower_http::{
     cors::CorsLayer,
     trace::{DefaultMakeSpan, TraceLayer},
 };
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod route;
 mod wrappers;
@@ -36,14 +35,7 @@ async fn main() {
         "3",
     ]);
 
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                format!("{}=debug,tower_http=debug", env!("CARGO_CRATE_NAME")).into()
-            }),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    cheatess_core::logger::init_with_buffer(args.verbose.into());
 
     let cors = CorsLayer::new()
         .allow_origin(
@@ -71,7 +63,8 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&format!("127.0.0.1:{be_port}"))
         .await
         .unwrap();
-    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+
+    println!("listening on {}", listener.local_addr().unwrap());
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),

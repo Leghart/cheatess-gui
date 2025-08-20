@@ -7,20 +7,28 @@ use axum::{
     body::Bytes,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
 };
+use futures_util::{
+    SinkExt,
+    stream::{SplitSink, StreamExt},
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{self, Value, json};
+
 use cheatess_core::engine::Color;
 use cheatess_core::monitor::Monitor;
-use futures_util::SinkExt;
-use futures_util::stream::SplitSink;
-use futures_util::stream::StreamExt;
-use serde::Deserialize;
-use serde::Serialize;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/game", any(game_handler))
+    Router::new()
+        .route("/game", any(game_handler))
+        .route("/logs", any(collect_logs_handler))
 }
 
 async fn game_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| start_game(socket, axum::extract::State(state)))
+}
+
+async fn collect_logs_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| get_logs(socket))
 }
 
 async fn send(sender: &mut SplitSink<WebSocket, Message>, msg: WsResponse) {
@@ -190,4 +198,28 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
             int_config.prev_board_mat = Some(gray_board);
         }
     });
+}
+
+async fn get_logs(mut socket: WebSocket) {
+    loop {
+        let logs = cheatess_core::logger::collect_logs();
+        if !logs.is_empty() {
+            let payload: Vec<Value> = logs
+                .into_iter()
+                .map(|log| json!({ "level": format!("{:?}", log.level), "message": log.message }))
+                .collect();
+
+            if socket
+                .send(Message::Text(
+                    serde_json::to_string(&payload).unwrap().into(),
+                ))
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
 }
