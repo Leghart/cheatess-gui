@@ -23,6 +23,7 @@ pub struct StockfishArgsDto {
     pub skill: Option<u8>,
     pub depth: Option<u8>,
     pub hash: Option<usize>,
+    pub pv: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -53,6 +54,7 @@ impl From<&CheatessArgs> for CheatessArgsDto {
                 skill: Some(c.stockfish.skill),
                 depth: Some(c.stockfish.depth),
                 hash: Some(c.stockfish.hash),
+                pv: Some(c.stockfish.pv),
             }),
             proc_image: Some(ImgProcArgsDto {
                 margin: Some(c.proc_image.margin),

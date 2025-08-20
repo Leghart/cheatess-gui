@@ -42,8 +42,8 @@ enum WsResponse {
 #[derive(Serialize, Deserialize)]
 struct CorrectMove {
     last_move: Option<String>,
-    best_move: String,
-    eval: String,
+    best_moves: Vec<Vec<String>>,
+    evaluations: Vec<String>,
     raw_board: [[char; 8]; 8],
 }
 
@@ -75,6 +75,7 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
         let monitor: Monitor;
         let coords: (u32, u32, u32, u32);
         let diff_level: i32;
+        let pv: usize;
         {
             let ext_config = state.ext_config.lock().await;
             let int_config = state.int_config.lock().await;
@@ -87,6 +88,7 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
 
             monitor_number = ext_config.monitor.as_ref().unwrap().number.unwrap();
             monitor = wrappers::methods::get_monitor(monitor_number).await;
+            pv = ext_config.stockfish.as_ref().unwrap().pv.unwrap();
 
             piece_threshold = ext_config
                 .proc_image
@@ -161,26 +163,26 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
 
             {
                 let mut stockfish = state.stockfish.lock().await;
-                let sf_best_move = stockfish.as_mut().unwrap().get_best_move();
-                match sf_best_move {
-                    Some(best_move) => {
-                        let eval = stockfish.as_mut().unwrap().get_evaluation();
-                        send(
-                            &mut sender,
-                            WsResponse::NextMove(Box::new(CorrectMove {
-                                last_move,
-                                best_move,
-                                eval,
-                                raw_board: *current_board.raw(),
-                            })),
-                        )
-                        .await;
-                    }
-                    None => {
+                let mut best_moves: Vec<Vec<String>> = Vec::new();
+                let mut evaluations: Vec<String> = Vec::new();
+                for sum in stockfish.as_mut().unwrap().summary(pv) {
+                    if sum.best_lines.is_empty() {
                         send(&mut sender, WsResponse::GameOver).await;
                         break;
                     }
-                };
+                    best_moves.push(sum.best_lines.clone());
+                    evaluations.push(sum.eval.clone());
+                }
+                send(
+                    &mut sender,
+                    WsResponse::NextMove(Box::new(CorrectMove {
+                        last_move,
+                        best_moves,
+                        evaluations,
+                        raw_board: *current_board.raw(),
+                    })),
+                )
+                .await;
             }
 
             let mut int_config = state.int_config.lock().await;

@@ -28,8 +28,8 @@ pub struct RawBoardResponse {
 #[derive(Deserialize, Serialize)]
 pub struct StockfishResponse {
     pub version: String,
-    pub best_move: Option<String>,
-    pub eval: Option<String>,
+    pub best_moves: Option<Vec<Vec<String>>>,
+    pub evaluations: Option<Vec<String>>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -61,11 +61,10 @@ async fn update_ext_config(
     if let Some(mode) = partial.mode {
         ext_config.mode = Some(mode);
     }
-    if let Some(monitor) = partial.monitor {
-        if let Some(number) = monitor.number {
-            ext_config.monitor.get_or_insert(Default::default()).number = Some(number);
-        }
+    if let Some(number) = partial.monitor.and_then(|m| m.number) {
+        ext_config.monitor.get_or_insert(Default::default()).number = Some(number);
     }
+
     if let Some(stockfish) = partial.stockfish {
         let s = ext_config.stockfish.get_or_insert(Default::default());
         if let Some(path) = stockfish.path {
@@ -115,10 +114,12 @@ async fn update_ext_config(
 async fn init(State(state): State<AppState>) -> impl IntoResponse {
     let monitor_number: u8;
     let proc_img_args: wrappers::args::ImgProcArgsDto;
+    let pv: usize;
     {
         let ext_config_guard = state.ext_config.lock().await;
         monitor_number = ext_config_guard.monitor.as_ref().unwrap().number.unwrap();
         proc_img_args = ext_config_guard.proc_image.as_ref().unwrap().clone();
+        pv = ext_config_guard.stockfish.as_ref().unwrap().pv.unwrap();
     }
     let screen = wrappers::methods::capture_screen_as_mat(monitor_number).await;
     let coords = wrappers::methods::get_coords(&screen).await;
@@ -155,11 +156,16 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
     int_config_guard.color = Some(ColorDto::from(color));
 
     let mut sf_guard = state.stockfish.lock().await;
-    let best_move = sf_guard.as_mut().unwrap().get_best_move().unwrap();
 
     let mut sf_data = sf_data;
-    sf_data.best_move = Some(best_move);
-    sf_data.eval = Some(sf_guard.as_mut().unwrap().get_evaluation());
+    let mut evals: Vec<String> = Vec::new();
+    let mut best_moves: Vec<Vec<String>> = Vec::new();
+    for sum in sf_guard.as_mut().unwrap().summary(pv).iter() {
+        evals.push(sum.eval.clone());
+        best_moves.push(sum.best_lines.clone());
+    }
+    sf_data.best_moves = Some(best_moves);
+    sf_data.evaluations = Some(evals);
 
     if sf_status != StatusCode::OK {
         return (
@@ -205,18 +211,21 @@ async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<Stoc
     let elo = ext_config_guard.stockfish.as_ref().unwrap().elo.unwrap();
     let skill = ext_config_guard.stockfish.as_ref().unwrap().skill.unwrap();
     let hash = ext_config_guard.stockfish.as_ref().unwrap().hash.unwrap();
+    let multi_lines = ext_config_guard.stockfish.as_ref().unwrap().pv.unwrap();
 
-    sf_guard
-        .as_mut()
-        .unwrap()
-        .set_config(&elo.to_string(), &skill.to_string(), &hash.to_string());
+    sf_guard.as_mut().unwrap().set_config(
+        &elo.to_string(),
+        &skill.to_string(),
+        &hash.to_string(),
+        &multi_lines.to_string(),
+    );
 
     (
         StatusCode::OK,
         Json(StockfishResponse {
             version,
-            best_move: None,
-            eval: None,
+            best_moves: None,
+            evaluations: None,
         }),
     )
 }
