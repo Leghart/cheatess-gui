@@ -453,6 +453,7 @@ dependencies = [
  "futures-util",
  "headers",
  "http",
+ "log",
  "rstest",
  "serde",
  "serde_json",

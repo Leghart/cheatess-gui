@@ -146,8 +146,9 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                 piece_threshold,
                 board_threshold,
             );
+            log::debug!("detected all pieces: {new_raw_board:?}");
 
-            let (mv, _mv_type) = {
+            let (mv, mv_type) = {
                 match cheatess_core::core::engine::detect_move(
                     &prev_board,
                     &new_raw_board,
@@ -157,7 +158,8 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                     Err(_) => continue,
                 }
             };
-
+            log::debug!("detected move: {mv:?}");
+            log::debug!("detected move type: {mv_type:?}");
             last_move = Some(mv.clone());
 
             {
@@ -175,6 +177,7 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                 let mut evaluations: Vec<String> = Vec::new();
                 for sum in stockfish.as_mut().unwrap().summary(pv) {
                     if sum.best_lines.is_empty() {
+                        log::info!("Not found stockfish best lines: Game over");
                         send(&mut sender, WsResponse::GameOver).await;
                         break;
                     }
@@ -196,6 +199,7 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
             let mut int_config = state.int_config.lock().await;
             int_config.prev_board = Some(*current_board.raw());
             int_config.prev_board_mat = Some(gray_board);
+            log::debug!("Save previous board: {:?}", int_config.prev_board);
         }
     });
 }
@@ -219,7 +223,6 @@ async fn get_logs(mut socket: WebSocket) {
                 break;
             }
         }
-
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 }
