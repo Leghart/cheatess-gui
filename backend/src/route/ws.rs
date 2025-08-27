@@ -7,20 +7,28 @@ use axum::{
     body::Bytes,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
 };
+use futures_util::{
+    SinkExt,
+    stream::{SplitSink, StreamExt},
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{self, Value, json};
+
 use cheatess_core::engine::Color;
 use cheatess_core::monitor::Monitor;
-use futures_util::SinkExt;
-use futures_util::stream::SplitSink;
-use futures_util::stream::StreamExt;
-use serde::Deserialize;
-use serde::Serialize;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/game", any(game_handler))
+    Router::new()
+        .route("/game", any(game_handler))
+        .route("/logs", any(collect_logs_handler))
 }
 
 async fn game_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| start_game(socket, axum::extract::State(state)))
+}
+
+async fn collect_logs_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(get_logs)
 }
 
 async fn send(sender: &mut SplitSink<WebSocket, Message>, msg: WsResponse) {
@@ -53,21 +61,21 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
         .await
         .is_ok()
     {
-        println!("Connected...");
+        log::info!("Starting...");
     } else {
-        println!("Could not send ping!");
+        log::error!("Socket disconnected");
         return;
     }
 
     if let Some(Err(e)) = socket.recv().await {
-        eprintln!("client abruptly disconnected {e}");
+        log::error!("client abruptly disconnected {e}");
         return;
     }
 
     let (mut sender, _receiver) = socket.split();
 
     tokio::spawn(async move {
-        let monitor_number: u8;
+        let monitor_name: Option<String>;
         let piece_threshold: f64;
         let board_threshold: f64;
         let pieces: std::collections::HashMap<char, std::sync::Arc<cheatess_core::procimg::Mat>>;
@@ -86,8 +94,14 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
             let tmp: Option<Color> = int_config.color.map(Into::into);
             player_color = tmp.unwrap();
 
-            monitor_number = ext_config.monitor.as_ref().unwrap().number.unwrap();
-            monitor = wrappers::methods::get_monitor(monitor_number).await;
+            monitor_name = ext_config.monitor.as_ref().unwrap().name.clone();
+            monitor = match wrappers::methods::get_monitor(monitor_name).await {
+                Ok(m) => m,
+                Err(e) => {
+                    log::error!("Failed to get monitor: {e}");
+                    return;
+                }
+            };
             pv = ext_config.stockfish.as_ref().unwrap().pv.unwrap();
 
             piece_threshold = ext_config
@@ -122,24 +136,54 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                 prev_board = int_config.prev_board.unwrap();
             }
 
-            let cropped = cheatess_core::utils::monitor::get_cropped_screen(
+            let cropped = match cheatess_core::utils::monitor::get_cropped_screen(
                 &monitor, coords.0, coords.1, coords.2, coords.3,
-            );
-            let gray_board =
-                cheatess_core::core::procimg::image_buffer_to_gray_mat(cropped).unwrap();
+            ) {
+                Ok(img) => img,
+                Err(e) => {
+                    log::error!("Failed to capture screen: {e}");
+                    continue;
+                }
+            };
+            let gray_board = match cheatess_core::core::procimg::image_buffer_to_gray_mat(cropped) {
+                Ok(mat) => mat,
+                Err(e) => {
+                    log::error!("Failed to convert image to gray mat: {e}");
+                    continue;
+                }
+            };
 
-            if !cheatess_core::procimg::are_images_different(&prev_mat, &gray_board, diff_level) {
-                continue;
+            match cheatess_core::core::procimg::are_images_different(
+                &prev_mat,
+                &gray_board,
+                diff_level,
+            ) {
+                Ok(result) => {
+                    if !result {
+                        continue;
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to compare images: {e}");
+                    continue;
+                }
             }
 
-            let new_raw_board = cheatess_core::core::procimg::find_all_pieces(
+            let new_raw_board = match cheatess_core::core::procimg::find_all_pieces(
                 &gray_board,
                 &pieces,
                 piece_threshold,
                 board_threshold,
-            );
+            ) {
+                Ok(board) => board,
+                Err(e) => {
+                    log::error!("Failed to detect pieces: {e}");
+                    continue;
+                }
+            };
+            log::debug!("detected all pieces: {new_raw_board:?}");
 
-            let (mv, _mv_type) = {
+            let (mv, mv_type) = {
                 match cheatess_core::core::engine::detect_move(
                     &prev_board,
                     &new_raw_board,
@@ -149,12 +193,19 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                     Err(_) => continue,
                 }
             };
-
+            log::debug!("detected move: {mv:?}");
+            log::debug!("detected move type: {mv_type:?}");
             last_move = Some(mv.clone());
 
             {
                 let mut stockfish = state.stockfish.lock().await;
-                stockfish.as_mut().unwrap().make_move(vec![mv]);
+                match stockfish.as_mut().unwrap().make_move(vec![mv]) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        log::error!("Failed to make move in stockfish: {e}");
+                        continue;
+                    }
+                };
             }
 
             let current_board = cheatess_core::core::engine::create_board_from_data::<
@@ -165,8 +216,17 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                 let mut stockfish = state.stockfish.lock().await;
                 let mut best_moves: Vec<Vec<String>> = Vec::new();
                 let mut evaluations: Vec<String> = Vec::new();
-                for sum in stockfish.as_mut().unwrap().summary(pv) {
+
+                let summary = match stockfish.as_mut().unwrap().summary(pv) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        log::error!("Failed to get stockfish summary: {e}");
+                        continue;
+                    }
+                };
+                for sum in summary {
                     if sum.best_lines.is_empty() {
+                        log::info!("Not found stockfish best lines: Game over");
                         send(&mut sender, WsResponse::GameOver).await;
                         break;
                     }
@@ -188,6 +248,30 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
             let mut int_config = state.int_config.lock().await;
             int_config.prev_board = Some(*current_board.raw());
             int_config.prev_board_mat = Some(gray_board);
+            log::debug!("Save previous board: {:?}", int_config.prev_board);
         }
     });
+}
+
+async fn get_logs(mut socket: WebSocket) {
+    loop {
+        let logs = cheatess_core::logger::collect_logs();
+        if !logs.is_empty() {
+            let payload: Vec<Value> = logs
+                .into_iter()
+                .map(|log| json!({ "level": format!("{:?}", log.level), "message": log.message }))
+                .collect();
+
+            if socket
+                .send(Message::Text(
+                    serde_json::to_string(&payload).unwrap().into(),
+                ))
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
 }

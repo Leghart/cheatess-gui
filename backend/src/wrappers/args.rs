@@ -13,7 +13,7 @@ pub struct CheatessArgsDto {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct MonitorArgsDto {
-    pub number: Option<u8>,
+    pub name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -46,7 +46,7 @@ impl From<&CheatessArgs> for CheatessArgsDto {
             verbose: Some(format!("{:?}", c.verbose)),
             mode: Some(c.mode.to_string()),
             monitor: Some(MonitorArgsDto {
-                number: Some(c.monitor.number),
+                name: c.monitor.name.clone(),
             }),
             stockfish: Some(StockfishArgsDto {
                 path: Some(c.stockfish.path.display().to_string()),
