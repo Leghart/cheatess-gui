@@ -61,8 +61,8 @@ async fn update_ext_config(
     if let Some(mode) = partial.mode {
         ext_config.mode = Some(mode);
     }
-    if let Some(number) = partial.monitor.and_then(|m| m.number) {
-        ext_config.monitor.get_or_insert(Default::default()).number = Some(number);
+    if let Some(name) = partial.monitor.and_then(|m| m.name) {
+        ext_config.monitor.get_or_insert(Default::default()).name = Some(name);
     }
 
     if let Some(stockfish) = partial.stockfish {
@@ -112,22 +112,62 @@ async fn update_ext_config(
 }
 
 async fn init(State(state): State<AppState>) -> impl IntoResponse {
-    let monitor_number: u8;
+    let monitor_name: Option<String>;
     let proc_img_args: wrappers::args::ImgProcArgsDto;
     let pv: usize;
     {
         let ext_config_guard = state.ext_config.lock().await;
-        monitor_number = ext_config_guard.monitor.as_ref().unwrap().number.unwrap();
+        monitor_name = ext_config_guard.monitor.as_ref().unwrap().name.clone();
         proc_img_args = ext_config_guard.proc_image.as_ref().unwrap().clone();
         pv = ext_config_guard.stockfish.as_ref().unwrap().pv.unwrap();
     }
-    let screen = wrappers::methods::capture_screen_as_mat(monitor_number).await;
-    let coords = wrappers::methods::get_coords(&screen).await;
+    let screen = match wrappers::methods::capture_screen_as_mat(monitor_name).await {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = format!("Failed to capture screen: {e}");
+            log::error!("{msg}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": msg})),
+            );
+        }
+    };
+    let coords = match wrappers::methods::get_coords(&screen).await {
+        Ok(c) => c,
+        Err(e) => {
+            let msg = format!("Failed to get board coordinates: {e}");
+            log::error!("{msg}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": msg })),
+            );
+        }
+    };
 
     let (sf_status, Json(sf_data)) = init_stockfish(State(state.clone())).await;
 
-    let board = wrappers::methods::crop_board(&screen, coords).await;
-    let color = procimg::detect_player_color(&board);
+    let board = match wrappers::methods::crop_board(&screen, coords).await {
+        Ok(b) => b,
+        Err(e) => {
+            let msg = format!("Failed to crop board: {e}");
+            log::error!("{msg}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": msg})),
+            );
+        }
+    };
+    let color = match procimg::detect_player_color(&board) {
+        Ok(c) => c,
+        Err(e) => {
+            let msg = format!("Failed to detect player color: {e}");
+            log::error!("{msg}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": msg })),
+            );
+        }
+    };
 
     {
         let mut int_config = state.int_config.lock().await;
@@ -137,13 +177,24 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
         int_config.prev_board = Some(*board.raw());
     }
 
-    let pieces = wrappers::methods::get_pieces(
+    let pieces = match wrappers::methods::get_pieces(
         &board,
         proc_img_args.margin.unwrap(),
         proc_img_args.extract_piece_threshold.unwrap(),
         &color,
     )
-    .await;
+    .await
+    {
+        Ok(p) => p,
+        Err(e) => {
+            let msg = format!("Failed to extract pieces: {e}");
+            log::error!("{msg}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": msg })),
+            );
+        }
+    };
 
     let pieces = pieces
         .into_iter()
@@ -160,7 +211,20 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
     let mut sf_data = sf_data;
     let mut evals: Vec<String> = Vec::new();
     let mut best_moves: Vec<Vec<String>> = Vec::new();
-    for sum in sf_guard.as_mut().unwrap().summary(pv).iter() {
+    let summary = match sf_guard.as_mut().unwrap().summary(pv) {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = format!("Failed to get stockfish summary: {e}");
+            log::error!("{msg}");
+
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": msg })),
+            );
+        }
+    };
+
+    for sum in summary {
         evals.push(sum.eval.clone());
         best_moves.push(sum.best_lines.clone());
     }
@@ -168,9 +232,11 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
     sf_data.evaluations = Some(evals);
 
     if sf_status != StatusCode::OK {
+        let msg = format!("Stockfish initialization failed: {sf_status:?}");
+        log::error!("{msg}");
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": format!("Stockfish initialization failed:{:?}",sf_status) })),
+            Json(json!({ "error": msg })),
         );
     }
 
@@ -213,12 +279,24 @@ async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<Stoc
     let hash = ext_config_guard.stockfish.as_ref().unwrap().hash.unwrap();
     let multi_lines = ext_config_guard.stockfish.as_ref().unwrap().pv.unwrap();
 
-    sf_guard.as_mut().unwrap().set_config(
+    match sf_guard.as_mut().unwrap().set_config(
         &elo.to_string(),
         &skill.to_string(),
         &hash.to_string(),
         &multi_lines.to_string(),
-    );
+    ) {
+        Ok(_) => {}
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(StockfishResponse {
+                    version: "".to_string(),
+                    best_moves: None,
+                    evaluations: None,
+                }),
+            );
+        }
+    }
 
     (
         StatusCode::OK,
