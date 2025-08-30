@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{self, json};
 use std::sync::Arc;
 
+use super::StockfishSummary;
+
 #[derive(Deserialize, Serialize)]
 pub struct InitBoardRequest {
     color: wrappers::enums::ColorDto,
@@ -28,8 +30,7 @@ pub struct RawBoardResponse {
 #[derive(Deserialize, Serialize)]
 pub struct StockfishResponse {
     pub version: String,
-    pub best_moves: Option<Vec<Vec<String>>>,
-    pub evaluations: Option<Vec<String>>,
+    pub summary: Option<Vec<StockfishSummary>>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -209,8 +210,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
     let mut sf_guard = state.stockfish.lock().await;
 
     let mut sf_data = sf_data;
-    let mut evals: Vec<String> = Vec::new();
-    let mut best_moves: Vec<Vec<String>> = Vec::new();
+
     let summary = match sf_guard.as_mut().unwrap().summary(pv) {
         Ok(s) => s,
         Err(e) => {
@@ -224,12 +224,15 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
         }
     };
 
-    for sum in summary {
-        evals.push(sum.eval.clone());
-        best_moves.push(sum.best_lines.clone());
-    }
-    sf_data.best_moves = Some(best_moves);
-    sf_data.evaluations = Some(evals);
+    sf_data.summary = Some(
+        summary
+            .into_iter()
+            .map(|sum| StockfishSummary {
+                main_line: sum.main_line,
+                evaluation: sum.eval,
+            })
+            .collect(),
+    );
 
     if sf_status != StatusCode::OK {
         let msg = format!("Stockfish initialization failed: {sf_status:?}");
@@ -291,8 +294,7 @@ async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<Stoc
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(StockfishResponse {
                     version: "".to_string(),
-                    best_moves: None,
-                    evaluations: None,
+                    summary: None,
                 }),
             );
         }
@@ -302,8 +304,7 @@ async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<Stoc
         StatusCode::OK,
         Json(StockfishResponse {
             version,
-            best_moves: None,
-            evaluations: None,
+            summary: None,
         }),
     )
 }

@@ -49,3 +49,9 @@ impl Clone for IntConfig {
         }
     }
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct StockfishSummary {
+    main_line: Vec<String>,
+    evaluation: String,
+}

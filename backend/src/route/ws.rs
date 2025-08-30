@@ -17,6 +17,8 @@ use serde_json::{self, Value, json};
 use cheatess_core::engine::Color;
 use cheatess_core::monitor::Monitor;
 
+use super::StockfishSummary;
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/game", any(game_handler))
@@ -50,8 +52,7 @@ enum WsResponse {
 #[derive(Serialize, Deserialize)]
 struct CorrectMove {
     last_move: Option<String>,
-    best_moves: Vec<Vec<String>>,
-    evaluations: Vec<String>,
+    summary: Option<Vec<StockfishSummary>>,
     raw_board: [[char; 8]; 8],
 }
 
@@ -214,9 +215,6 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
 
             {
                 let mut stockfish = state.stockfish.lock().await;
-                let mut best_moves: Vec<Vec<String>> = Vec::new();
-                let mut evaluations: Vec<String> = Vec::new();
-
                 let summary = match stockfish.as_mut().unwrap().summary(pv) {
                     Ok(s) => s,
                     Err(e) => {
@@ -224,21 +222,25 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
                         continue;
                     }
                 };
+
+                let mut stockfish_summary: Vec<StockfishSummary> = Vec::new();
                 for sum in summary {
-                    if sum.best_lines.is_empty() {
+                    if sum.main_line.is_empty() {
                         log::info!("Not found stockfish best lines: Game over");
                         send(&mut sender, WsResponse::GameOver).await;
                         break;
                     }
-                    best_moves.push(sum.best_lines.clone());
-                    evaluations.push(sum.eval.clone());
+                    stockfish_summary.push(StockfishSummary {
+                        main_line: sum.main_line,
+                        evaluation: sum.eval,
+                    });
                 }
+
                 send(
                     &mut sender,
                     WsResponse::NextMove(Box::new(CorrectMove {
                         last_move,
-                        best_moves,
-                        evaluations,
+                        summary: Some(stockfish_summary),
                         raw_board: *current_board.raw(),
                     })),
                 )
