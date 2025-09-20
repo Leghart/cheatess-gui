@@ -8,7 +8,7 @@ use axum::{
     routing::{get, patch, post},
 };
 use cheatess_core::core::{
-    engine::{Color, DefaultPrinter, create_board_default},
+    engine::{DefaultPrinter, create_board_default},
     procimg, stockfish,
 };
 use serde::{Deserialize, Serialize};
@@ -16,11 +16,6 @@ use serde_json::{self, json};
 use std::sync::Arc;
 
 use super::StockfishSummary;
-
-#[derive(Deserialize, Serialize)]
-pub struct InitBoardRequest {
-    color: Color,
-}
 
 #[derive(Deserialize, Serialize)]
 pub struct RawBoardResponse {
