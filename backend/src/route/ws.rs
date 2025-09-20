@@ -1,5 +1,4 @@
 use crate::AppState;
-use crate::wrappers::{self, func::FuncWrapper};
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::{Router, routing::any};
