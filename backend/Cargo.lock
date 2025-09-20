@@ -464,6 +464,7 @@ dependencies = [
 [[package]]
 name = "cheatess-core"
 version = "0.1.0"
+source = "git+https://github.com/Leghart/cheatess-core?branch=develop#5d10823ab533b7cef61ccca67f8cf32c79dcfb18"
 dependencies = [
  "clap",
  "clap-verbosity-flag",
