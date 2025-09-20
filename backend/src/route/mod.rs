@@ -3,7 +3,7 @@ pub mod ws;
 use cheatess_core::{core::engine::Color, core::stockfish::Stockfish, procimg::Mat};
 use std::sync::Arc;
 
-use crate::wrappers::args;
+use crate::wrappers::{args, func::FuncWrapper};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -12,9 +12,10 @@ pub struct AppState {
     pub stockfish: Arc<Mutex<Option<Stockfish>>>,
     pub ext_config: Arc<Mutex<args::CheatessArgsDto>>,
     pub int_config: Arc<Mutex<IntConfig>>,
+    pub funcs: Arc<dyn FuncWrapper + Send + Sync>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct IntConfig {
     coords: Option<(u32, u32, u32, u32)>,
     prev_board: Option<[[char; 8]; 8]>,

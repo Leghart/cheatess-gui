@@ -1,5 +1,5 @@
 use crate::AppState;
-use crate::wrappers;
+use crate::wrappers::{self, func::FuncWrapper};
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::{Router, routing::any};
@@ -94,7 +94,7 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
             player_color = int_config.color.unwrap();
 
             monitor_name = ext_config.monitor.as_ref().unwrap().name.clone();
-            monitor = match wrappers::func::get_monitor(monitor_name).await {
+            monitor = match state.funcs.get_monitor(monitor_name).await {
                 Ok(m) => m,
                 Err(e) => {
                     log::error!("Failed to get monitor: {e}");

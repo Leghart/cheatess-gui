@@ -13,6 +13,8 @@ mod wrappers;
 use route::{AppState, IntConfig};
 use wrappers::args;
 
+use crate::wrappers::func::ProdFunc;
+
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
@@ -52,6 +54,7 @@ async fn main() {
             stockfish: Arc::new(Mutex::new(None)),
             ext_config: Arc::new(Mutex::new(args::CheatessArgsDto::from(&args))),
             int_config: Arc::new(Mutex::new(IntConfig::new())),
+            funcs: Arc::new(ProdFunc),
         })
         .layer(cors);
 

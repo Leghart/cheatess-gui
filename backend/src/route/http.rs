@@ -4,7 +4,7 @@ use axum::{
     Json, Router,
     extract::State,
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{get, patch, post},
 };
 use cheatess_core::core::{
@@ -43,6 +43,15 @@ async fn get_int_config(State(state): State<AppState>) -> (StatusCode, Json<IntC
 
 async fn get_ext_config(State(state): State<AppState>) -> (StatusCode, Json<CheatessArgsDto>) {
     (StatusCode::OK, Json(state.ext_config.lock().await.clone()))
+}
+
+async fn get_prev_board(State(state): State<AppState>) -> Response {
+    let int_config_guard = state.int_config.lock().await;
+
+    match int_config_guard.prev_board {
+        Some(raw_data) => (StatusCode::OK, Json(RawBoardResponse { raw_data })).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 async fn update_ext_config(
@@ -113,11 +122,32 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
     let pv: usize;
     {
         let ext_config_guard = state.ext_config.lock().await;
+        if ext_config_guard.monitor.is_none() {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "MonitorArgsDto is None"})),
+            );
+        }
+
+        if ext_config_guard.proc_image.is_none() {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "ImgProcArgsDto is None"})),
+            );
+        }
+
+        if ext_config_guard.stockfish.is_none() {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Stockfish is None"})),
+            );
+        }
+
         monitor_name = ext_config_guard.monitor.as_ref().unwrap().name.clone();
         proc_img_args = ext_config_guard.proc_image.as_ref().unwrap().clone();
         pv = ext_config_guard.stockfish.as_ref().unwrap().pv.unwrap();
     }
-    let screen = match wrappers::func::capture_screen_as_mat(monitor_name).await {
+    let screen = match state.funcs.capture_screen_as_mat(monitor_name).await {
         Ok(s) => s,
         Err(e) => {
             let msg = format!("Failed to capture screen: {e}");
@@ -128,7 +158,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
             );
         }
     };
-    let coords = match wrappers::func::get_coords(&screen).await {
+    let coords = match state.funcs.get_coords(&screen).await {
         Ok(c) => c,
         Err(e) => {
             let msg = format!("Failed to get board coordinates: {e}");
@@ -142,7 +172,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
 
     let (sf_status, Json(sf_data)) = init_stockfish(State(state.clone())).await;
 
-    let board = match wrappers::func::crop_board(&screen, coords).await {
+    let board = match state.funcs.crop_board(&screen, coords).await {
         Ok(b) => b,
         Err(e) => {
             let msg = format!("Failed to crop board: {e}");
@@ -173,13 +203,15 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
         int_config.prev_board = Some(*board.raw());
     }
 
-    let pieces = match wrappers::func::get_pieces(
-        &board,
-        proc_img_args.margin.unwrap(),
-        proc_img_args.extract_piece_threshold.unwrap(),
-        &color,
-    )
-    .await
+    let pieces = match state
+        .funcs
+        .get_pieces(
+            &board,
+            proc_img_args.margin.unwrap(),
+            proc_img_args.extract_piece_threshold.unwrap(),
+            &color,
+        )
+        .await
     {
         Ok(p) => p,
         Err(e) => {
@@ -247,15 +279,6 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
     )
 }
 
-async fn get_prev_board(State(state): State<AppState>) -> (StatusCode, Json<RawBoardResponse>) {
-    let int_config_guard = state.int_config.lock().await;
-    let raw_data = int_config_guard
-        .prev_board
-        .expect("Board hasn't been created yet.");
-
-    (StatusCode::OK, Json(RawBoardResponse { raw_data }))
-}
-
 async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<StockfishResponse>) {
     let mut sf_guard = state.stockfish.lock().await;
     let ext_config_guard = state.ext_config.lock().await;
@@ -302,4 +325,152 @@ async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<Stoc
             summary: None,
         }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::wrappers::{
+        args::{ImgProcArgsDto, MonitorArgsDto, StockfishArgsDto},
+        func::MockFunc,
+    };
+
+    use super::*;
+    use axum_test::TestServer;
+    use cheatess_core::{
+        core::engine::{Color, DefaultPrinter, create_board_default},
+        procimg::Mat,
+    };
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    #[tokio::test]
+    async fn get_board_before_init() {
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(IntConfig {
+                prev_board: None,
+                color: None,
+                coords: None,
+                prev_board_mat: None,
+                pieces: None,
+            })),
+            ext_config: Arc::new(Mutex::new(Default::default())),
+            stockfish: Arc::new(Mutex::new(Default::default())),
+            funcs: Arc::new(MockFunc::default()),
+        };
+
+        let app = router().with_state(state);
+
+        let server = TestServer::new(app).unwrap();
+
+        let response = server.get("/board").await;
+
+        response.assert_status_not_found();
+        response.assert_text("");
+    }
+
+    #[tokio::test]
+    async fn get_board_after_init() {
+        let board = create_board_default::<DefaultPrinter>(&Color::White);
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(IntConfig {
+                prev_board: Some(*board.as_ref().raw()),
+                color: None,
+                coords: None,
+                prev_board_mat: None,
+                pieces: None,
+            })),
+            ext_config: Arc::new(Mutex::new(Default::default())),
+            stockfish: Arc::new(Mutex::new(Default::default())),
+            funcs: Arc::new(MockFunc::default()),
+        };
+
+        let app = router().with_state(state);
+
+        let server = TestServer::new(app).unwrap();
+
+        let response = server.get("/board").await;
+
+        let output = [
+            ["r", "n", "b", "q", "k", "b", "n", "r"],
+            ["p", "p", "p", "p", "p", "p", "p", "p"],
+            [" ", " ", " ", " ", " ", " ", " ", " "],
+            [" ", " ", " ", " ", " ", " ", " ", " "],
+            [" ", " ", " ", " ", " ", " ", " ", " "],
+            [" ", " ", " ", " ", " ", " ", " ", " "],
+            ["P", "P", "P", "P", "P", "P", "P", "P"],
+            ["R", "N", "B", "Q", "K", "B", "N", "R"],
+        ];
+        response.assert_status_ok();
+        response.assert_json(&serde_json::json!({"raw_data":output}));
+    }
+
+    #[tokio::test]
+    async fn init_failed_with_capture_screen() {
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(Default::default())),
+            ext_config: Arc::new(Mutex::new(CheatessArgsDto {
+                monitor: Some(MonitorArgsDto {
+                    name: Some("abc".to_string()),
+                }),
+                stockfish: Some(StockfishArgsDto {
+                    pv: Some(3),
+                    ..Default::default()
+                }),
+                proc_image: Some(ImgProcArgsDto {
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+            stockfish: Arc::new(Mutex::new(Default::default())),
+            funcs: Arc::new(MockFunc::default()),
+        };
+
+        let app = router().with_state(state);
+
+        let server = TestServer::new(app).unwrap();
+
+        let response = server.post("/init").await;
+
+        response.assert_status_internal_server_error();
+        response.assert_json(
+            &serde_json::json!({"error":"Failed to capture screen: Monitor not found"}),
+        );
+    }
+
+    #[tokio::test]
+    async fn init_failed_with_get_coords() {
+        let funcs = MockFunc {
+            mat: Some(Mat::default()),
+            ..Default::default()
+        };
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(Default::default())),
+            ext_config: Arc::new(Mutex::new(CheatessArgsDto {
+                monitor: Some(MonitorArgsDto {
+                    name: Some("abc".to_string()),
+                }),
+                stockfish: Some(StockfishArgsDto {
+                    pv: Some(3),
+                    ..Default::default()
+                }),
+                proc_image: Some(ImgProcArgsDto {
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+            stockfish: Arc::new(Mutex::new(Default::default())),
+            funcs: Arc::new(funcs),
+        };
+
+        let app = router().with_state(state);
+
+        let server = TestServer::new(app).unwrap();
+
+        let response = server.post("/init").await;
+
+        response.assert_status_internal_server_error();
+        response.assert_json(
+            &serde_json::json!({"error":"Failed to get board coordinates: Monitor not found"}),
+        );
+    }
 }
