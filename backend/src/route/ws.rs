@@ -91,12 +91,10 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
 
             coords = int_config.coords.unwrap();
             pieces = int_config.pieces.clone().unwrap();
-
-            let tmp: Option<Color> = int_config.color.map(Into::into);
-            player_color = tmp.unwrap();
+            player_color = int_config.color.unwrap();
 
             monitor_name = ext_config.monitor.as_ref().unwrap().name.clone();
-            monitor = match wrappers::methods::get_monitor(monitor_name).await {
+            monitor = match wrappers::func::get_monitor(monitor_name).await {
                 Ok(m) => m,
                 Err(e) => {
                     log::error!("Failed to get monitor: {e}");

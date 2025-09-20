@@ -6,8 +6,8 @@ edition = "2024"
 repository = "https://github.com/Leghart/cheatess-gui"
 
 [dependencies]
-cheatess-core = {  git = "https://github.com/Leghart/cheatess-core", branch = "develop" }
-#cheatess-core = {  path = "/home/leghart/projects/cheatess"}
+#cheatess-core = {  git = "https://github.com/Leghart/cheatess-core", branch = "develop" , features = ["serde"]}
+cheatess-core = {  path = "/home/leghart/projects/cheatess", features = ["serde"]}
 axum = { version = "0.8.4", features = ["ws"]}
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 headers = "0.4"

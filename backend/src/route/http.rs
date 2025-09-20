@@ -1,5 +1,5 @@
 use crate::route::{AppState, IntConfig};
-use crate::wrappers::{self, args::CheatessArgsDto, enums::ColorDto};
+use crate::wrappers::{self, args::CheatessArgsDto};
 use axum::{
     Json, Router,
     extract::State,
@@ -8,7 +8,7 @@ use axum::{
     routing::{get, patch, post},
 };
 use cheatess_core::core::{
-    engine::{DefaultPrinter, create_board_default},
+    engine::{Color, DefaultPrinter, create_board_default},
     procimg, stockfish,
 };
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,7 @@ use super::StockfishSummary;
 
 #[derive(Deserialize, Serialize)]
 pub struct InitBoardRequest {
-    color: wrappers::enums::ColorDto,
+    color: Color,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -122,7 +122,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
         proc_img_args = ext_config_guard.proc_image.as_ref().unwrap().clone();
         pv = ext_config_guard.stockfish.as_ref().unwrap().pv.unwrap();
     }
-    let screen = match wrappers::methods::capture_screen_as_mat(monitor_name).await {
+    let screen = match wrappers::func::capture_screen_as_mat(monitor_name).await {
         Ok(s) => s,
         Err(e) => {
             let msg = format!("Failed to capture screen: {e}");
@@ -133,7 +133,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
             );
         }
     };
-    let coords = match wrappers::methods::get_coords(&screen).await {
+    let coords = match wrappers::func::get_coords(&screen).await {
         Ok(c) => c,
         Err(e) => {
             let msg = format!("Failed to get board coordinates: {e}");
@@ -147,7 +147,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
 
     let (sf_status, Json(sf_data)) = init_stockfish(State(state.clone())).await;
 
-    let board = match wrappers::methods::crop_board(&screen, coords).await {
+    let board = match wrappers::func::crop_board(&screen, coords).await {
         Ok(b) => b,
         Err(e) => {
             let msg = format!("Failed to crop board: {e}");
@@ -178,7 +178,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
         int_config.prev_board = Some(*board.raw());
     }
 
-    let pieces = match wrappers::methods::get_pieces(
+    let pieces = match wrappers::func::get_pieces(
         &board,
         proc_img_args.margin.unwrap(),
         proc_img_args.extract_piece_threshold.unwrap(),
@@ -205,7 +205,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
     let mut int_config_guard = state.int_config.lock().await;
     int_config_guard.pieces = Some(pieces);
     int_config_guard.prev_board_mat = Some(board);
-    int_config_guard.color = Some(ColorDto::from(color));
+    int_config_guard.color = Some(color);
 
     let mut sf_guard = state.stockfish.lock().await;
 

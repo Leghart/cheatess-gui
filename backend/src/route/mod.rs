@@ -1,9 +1,9 @@
 pub mod http;
 pub mod ws;
-use cheatess_core::{core::stockfish::Stockfish, procimg::Mat};
+use cheatess_core::{core::engine::Color, core::stockfish::Stockfish, procimg::Mat};
 use std::sync::Arc;
 
-use crate::wrappers::{args, enums::ColorDto};
+use crate::wrappers::args;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -18,7 +18,7 @@ pub struct AppState {
 pub struct IntConfig {
     coords: Option<(u32, u32, u32, u32)>,
     prev_board: Option<[[char; 8]; 8]>,
-    color: Option<ColorDto>,
+    color: Option<Color>,
     #[serde(skip)]
     prev_board_mat: Option<Mat>,
     #[serde(skip)]
