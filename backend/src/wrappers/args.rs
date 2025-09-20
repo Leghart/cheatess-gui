@@ -1,10 +1,10 @@
-use cheatess_core::utils::parser::CheatessArgs;
+use cheatess_core::utils::parser::{CheatessArgs, Mode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct CheatessArgsDto {
     pub verbose: Option<String>,
-    pub mode: Option<String>,
+    pub mode: Option<Mode>,
     pub monitor: Option<MonitorArgsDto>,
     pub stockfish: Option<StockfishArgsDto>,
     pub proc_image: Option<ImgProcArgsDto>,
@@ -44,7 +44,7 @@ impl From<&CheatessArgs> for CheatessArgsDto {
     fn from(c: &CheatessArgs) -> Self {
         Self {
             verbose: Some(format!("{:?}", c.verbose)),
-            mode: Some(c.mode.to_string()),
+            mode: Some(c.mode),
             monitor: Some(MonitorArgsDto {
                 name: c.monitor.name.clone(),
             }),
