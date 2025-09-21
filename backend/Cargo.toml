@@ -24,7 +24,6 @@ async-trait = "0.1.89"
 rstest = "0.24.0"
 clippy = "0.0.302"
 axum-test = "18.1.0"
-tower = "0.5.2"
 
 [profile.release]
 codegen-units = 1

@@ -1,16 +1,23 @@
 pub mod http;
 pub mod ws;
 use cheatess_core::{core::engine::Color, core::stockfish::Stockfish, procimg::Mat};
+
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::wrappers::{args, func::FuncWrapper};
+use crate::wrappers::{
+    args::CheatessArgsDto,
+    func::{FuncWrapper, StockfishLike},
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
+pub type ExtConfig = CheatessArgsDto;
+
 #[derive(Clone)]
 pub struct AppState {
-    pub stockfish: Arc<Mutex<Option<Stockfish>>>,
-    pub ext_config: Arc<Mutex<args::CheatessArgsDto>>,
+    pub stockfish: Arc<Mutex<Option<Box<dyn StockfishLike>>>>,
+    pub ext_config: Arc<Mutex<ExtConfig>>,
     pub int_config: Arc<Mutex<IntConfig>>,
     pub funcs: Arc<dyn FuncWrapper + Send + Sync>,
 }
@@ -23,7 +30,7 @@ pub struct IntConfig {
     #[serde(skip)]
     prev_board_mat: Option<Mat>,
     #[serde(skip)]
-    pieces: Option<std::collections::HashMap<char, Arc<Mat>>>,
+    pieces: Option<HashMap<char, Arc<Mat>>>,
 }
 
 impl IntConfig {

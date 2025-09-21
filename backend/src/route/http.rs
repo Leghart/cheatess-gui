@@ -9,7 +9,7 @@ use axum::{
 };
 use cheatess_core::core::{
     engine::{DefaultPrinter, create_board_default},
-    procimg, stockfish,
+    procimg,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{self, json};
@@ -172,6 +172,15 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
 
     let (sf_status, Json(sf_data)) = init_stockfish(State(state.clone())).await;
 
+    if sf_status != 200 {
+        let msg = format!("Init stockfish failed");
+        log::error!("{msg}");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": msg})),
+        );
+    }
+
     let board = match state.funcs.crop_board(&screen, coords).await {
         Ok(b) => b,
         Err(e) => {
@@ -238,7 +247,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
 
     let mut sf_data = sf_data;
 
-    let summary = match sf_guard.as_mut().unwrap().summary(pv) {
+    let summary = match sf_guard.as_mut().unwrap().get_summary(pv) {
         Ok(s) => s,
         Err(e) => {
             let msg = format!("Failed to get stockfish summary: {e}");
@@ -279,6 +288,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
     )
 }
 
+// TODO: move to FuncWrapper
 async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<StockfishResponse>) {
     let mut sf_guard = state.stockfish.lock().await;
     let ext_config_guard = state.ext_config.lock().await;
@@ -288,11 +298,11 @@ async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<Stoc
         let path = std::path::PathBuf::from(std::env::var("ENGINE_PATH").unwrap());
         let depth = 5;
 
-        let sf = stockfish::Stockfish::new(&path, depth);
-        version = sf.version.clone();
+        let sf = state.funcs.init_stockfish(&path, depth).unwrap();
+        version = sf.get_version();
         *sf_guard = Some(sf);
     } else {
-        version = sf_guard.as_ref().unwrap().version.clone();
+        version = sf_guard.as_ref().unwrap().get_version();
     }
 
     let elo = ext_config_guard.stockfish.as_ref().unwrap().elo.unwrap();
@@ -331,7 +341,7 @@ async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<Stoc
 mod tests {
     use crate::wrappers::{
         args::{ImgProcArgsDto, MonitorArgsDto, StockfishArgsDto},
-        func::MockFunc,
+        func::{MockFunc, MockStockfish},
     };
 
     use super::*;
@@ -473,4 +483,57 @@ mod tests {
             &serde_json::json!({"error":"Failed to get board coordinates: Monitor not found"}),
         );
     }
+
+    #[tokio::test]
+    async fn init_failed_with_crop_board() {
+        unsafe {
+            // TODO: unnecessary if async init_stockfish will be mocked
+            std::env::set_var("ENGINE_PATH", "./engine_path");
+        }
+
+        let funcs = MockFunc {
+            mat: Some(Mat::default()),
+            coords: Some((1, 1, 1, 1)),
+            stockfish_ptr: Some(Box::new(MockStockfish {
+                version: "0.0".to_string(),
+                summary: None,
+            })),
+            ..Default::default()
+        };
+
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(IntConfig {
+                ..Default::default()
+            })),
+            ext_config: Arc::new(Mutex::new(CheatessArgsDto {
+                monitor: Some(MonitorArgsDto {
+                    name: Some("abc".to_string()),
+                }),
+                stockfish: Some(StockfishArgsDto {
+                    pv: Some(3),
+                    elo: Some(10),
+                    skill: Some(5),
+                    hash: Some(1),
+                    ..Default::default()
+                }),
+                proc_image: Some(ImgProcArgsDto {
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+            stockfish: Arc::new(Mutex::new(Default::default())),
+            funcs: Arc::new(funcs),
+        };
+
+        let app = router().with_state(state);
+        let server = TestServer::new(app).unwrap();
+
+        let response = server.post("/init").await;
+
+        response.assert_status_internal_server_error();
+        response
+            .assert_json(&serde_json::json!({"error":"Failed to crop board: Monitor not found"}));
+    }
+
+    // TODO!: add tests for init_stockfish
 }

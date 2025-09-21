@@ -2,6 +2,7 @@ use cheatess_core::engine::Color;
 use cheatess_core::procimg::{
     Mat, crop_mat, extract_pieces, get_board_region, image_buffer_to_gray_mat,
 };
+use cheatess_core::stockfish::{Stockfish, Summary};
 use cheatess_core::utils::error::CheatessResult;
 use cheatess_core::utils::monitor::{self, Monitor};
 
@@ -10,6 +11,22 @@ use std::collections::HashMap;
 
 #[cfg(test)]
 use cheatess_core::utils::error::CheatessError;
+
+pub trait StockfishLike: Send + Sync {
+    fn get_version(&self) -> String;
+
+    fn set_config(
+        &mut self,
+        elo: &str,
+        skill: &str,
+        hash: &str,
+        multi_lines: &str,
+    ) -> CheatessResult<()>;
+
+    fn get_summary(&mut self, search_lines: usize) -> CheatessResult<Vec<Summary>>;
+
+    fn make_move(&mut self, moves: Vec<String>) -> CheatessResult<()>;
+}
 
 #[async_trait]
 pub trait FuncWrapper {
@@ -24,9 +41,18 @@ pub trait FuncWrapper {
         threshold: f64,
         color: &Color,
     ) -> CheatessResult<HashMap<char, Mat>>;
+    fn init_stockfish(
+        &self,
+        path: &std::path::PathBuf,
+        depth: u8,
+    ) -> Option<Box<dyn StockfishLike>>;
 }
 
 pub struct ProdFunc;
+
+unsafe impl Send for ProdFunc {}
+unsafe impl Sync for ProdFunc {}
+
 #[async_trait]
 impl FuncWrapper for ProdFunc {
     async fn capture_screen_as_mat(&self, monitor_name: Option<String>) -> CheatessResult<Mat> {
@@ -56,15 +82,57 @@ impl FuncWrapper for ProdFunc {
     async fn get_coords(&self, board: &Mat) -> CheatessResult<(u32, u32, u32, u32)> {
         get_board_region(board)
     }
+
+    fn init_stockfish(
+        &self,
+        path: &std::path::PathBuf,
+        depth: u8,
+    ) -> Option<Box<dyn StockfishLike>> {
+        let sf = Stockfish::new(path, depth);
+        Some(Box::new(ProdStockfish { inner: sf }))
+    }
+}
+
+pub struct ProdStockfish {
+    inner: Stockfish,
+}
+
+unsafe impl Send for ProdStockfish {}
+unsafe impl Sync for ProdStockfish {}
+
+impl StockfishLike for ProdStockfish {
+    fn set_config(
+        &mut self,
+        elo: &str,
+        skill: &str,
+        hash: &str,
+        multi_lines: &str,
+    ) -> CheatessResult<()> {
+        self.inner.set_config(elo, skill, hash, multi_lines)
+    }
+
+    fn get_summary(&mut self, search_lines: usize) -> CheatessResult<Vec<Summary>> {
+        self.inner.summary(search_lines)
+    }
+
+    fn get_version(&self) -> String {
+        self.inner.version.clone()
+    }
+
+    fn make_move(&mut self, moves: Vec<String>) -> CheatessResult<()> {
+        self.inner.make_move(moves)
+    }
 }
 
 #[cfg(test)]
 #[derive(Default)]
 pub struct MockFunc {
     pub mat: Option<Mat>,
+    pub crop_mat: Option<Mat>,
     pub monitor: Option<Monitor>,
     pub map: Option<HashMap<char, Mat>>,
     pub coords: Option<(u32, u32, u32, u32)>,
+    pub stockfish_ptr: Option<Box<dyn StockfishLike>>,
 }
 
 #[cfg(test)]
@@ -73,10 +141,42 @@ impl MockFunc {
     fn default() -> MockFunc {
         MockFunc {
             mat: None,
+            crop_mat: None,
             monitor: None,
             map: None,
             coords: None,
+            stockfish_ptr: None,
         }
+    }
+}
+
+#[cfg(test)]
+pub struct MockStockfish {
+    pub version: String,
+    pub summary: Option<Vec<Summary>>,
+}
+
+#[cfg(test)]
+impl StockfishLike for MockStockfish {
+    fn get_summary(&mut self, _: usize) -> CheatessResult<Vec<Summary>> {
+        match self.summary.take() {
+            Some(s) => Ok(s),
+            None => unreachable!("temporary"),
+        }
+    }
+
+    fn get_version(&self) -> String {
+        self.version.clone()
+    }
+
+    fn make_move(&mut self, _: Vec<String>) -> CheatessResult<()> {
+        // TODO: temporary
+        CheatessResult::Ok(())
+    }
+
+    fn set_config(&mut self, _: &str, _: &str, _: &str, _: &str) -> CheatessResult<()> {
+        // TODO: temporary
+        CheatessResult::Ok(())
     }
 }
 
@@ -91,7 +191,7 @@ impl FuncWrapper for MockFunc {
     }
 
     async fn crop_board(&self, _: &Mat, _: (u32, u32, u32, u32)) -> CheatessResult<Mat> {
-        match &self.mat {
+        match &self.crop_mat {
             Some(m) => Ok(m.to_owned()),
             None => Err(CheatessError::MonitorNotFound), // TODO: temporary mapped to another error
         }
@@ -122,5 +222,18 @@ impl FuncWrapper for MockFunc {
             Some(m) => Ok(m.to_owned()),
             None => Err(CheatessError::MonitorNotFound), // TODO: temporary mapped to another error
         }
+    }
+
+    fn init_stockfish(
+        &self,
+        _path: &std::path::PathBuf,
+        _depth: u8,
+    ) -> Option<Box<dyn StockfishLike>> {
+        self.stockfish_ptr.as_ref().map(|_| {
+            Box::new(MockStockfish {
+                version: "mock".to_string(),
+                summary: None,
+            }) as Box<dyn StockfishLike>
+        })
     }
 }

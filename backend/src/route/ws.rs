@@ -212,7 +212,7 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
 
             {
                 let mut stockfish = state.stockfish.lock().await;
-                let summary = match stockfish.as_mut().unwrap().summary(pv) {
+                let summary = match stockfish.as_mut().unwrap().get_summary(pv) {
                     Ok(s) => s,
                     Err(e) => {
                         log::error!("Failed to get stockfish summary: {e}");
