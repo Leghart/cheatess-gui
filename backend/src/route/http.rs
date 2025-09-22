@@ -22,12 +22,6 @@ pub struct RawBoardResponse {
     pub raw_data: [[char; 8]; 8],
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct StockfishResponse {
-    pub version: String,
-    pub summary: Option<Vec<StockfishSummary>>,
-}
-
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/init", post(init))
@@ -170,9 +164,9 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
         }
     };
 
-    let (sf_status, Json(sf_data)) = init_stockfish(State(state.clone())).await;
+    let sf_result = state.funcs.init_stockfish(State(state.clone())).await;
 
-    if sf_status != 200 {
+    if sf_result.is_err() {
         let msg = format!("Init stockfish failed");
         log::error!("{msg}");
         return (
@@ -180,6 +174,8 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
             Json(json!({ "error": msg})),
         );
     }
+
+    let sf_data = sf_result.unwrap();
 
     let board = match state.funcs.crop_board(&screen, coords).await {
         Ok(b) => b,
@@ -270,15 +266,6 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
             .collect(),
     );
 
-    if sf_status != StatusCode::OK {
-        let msg = format!("Stockfish initialization failed: {sf_status:?}");
-        log::error!("{msg}");
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": msg })),
-        );
-    }
-
     (
         StatusCode::OK,
         Json(json!({
@@ -288,60 +275,11 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
     )
 }
 
-// TODO: move to FuncWrapper
-async fn init_stockfish(State(state): State<AppState>) -> (StatusCode, Json<StockfishResponse>) {
-    let mut sf_guard = state.stockfish.lock().await;
-    let ext_config_guard = state.ext_config.lock().await;
-
-    let version: String;
-    if sf_guard.is_none() {
-        let path = std::path::PathBuf::from(std::env::var("ENGINE_PATH").unwrap());
-        let depth = 5;
-
-        let sf = state.funcs.init_stockfish(&path, depth).unwrap();
-        version = sf.get_version();
-        *sf_guard = Some(sf);
-    } else {
-        version = sf_guard.as_ref().unwrap().get_version();
-    }
-
-    let elo = ext_config_guard.stockfish.as_ref().unwrap().elo.unwrap();
-    let skill = ext_config_guard.stockfish.as_ref().unwrap().skill.unwrap();
-    let hash = ext_config_guard.stockfish.as_ref().unwrap().hash.unwrap();
-    let multi_lines = ext_config_guard.stockfish.as_ref().unwrap().pv.unwrap();
-
-    match sf_guard.as_mut().unwrap().set_config(
-        &elo.to_string(),
-        &skill.to_string(),
-        &hash.to_string(),
-        &multi_lines.to_string(),
-    ) {
-        Ok(_) => {}
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(StockfishResponse {
-                    version: "".to_string(),
-                    summary: None,
-                }),
-            );
-        }
-    }
-
-    (
-        StatusCode::OK,
-        Json(StockfishResponse {
-            version,
-            summary: None,
-        }),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use crate::wrappers::{
         args::{ImgProcArgsDto, MonitorArgsDto, StockfishArgsDto},
-        func::{MockFunc, MockStockfish},
+        func::MockFunc,
     };
 
     use super::*;
@@ -473,7 +411,6 @@ mod tests {
         };
 
         let app = router().with_state(state);
-
         let server = TestServer::new(app).unwrap();
 
         let response = server.post("/init").await;
@@ -486,34 +423,20 @@ mod tests {
 
     #[tokio::test]
     async fn init_failed_with_crop_board() {
-        unsafe {
-            // TODO: unnecessary if async init_stockfish will be mocked
-            std::env::set_var("ENGINE_PATH", "./engine_path");
-        }
-
         let funcs = MockFunc {
-            mat: Some(Mat::default()),
+            init_stockfish_ok: true,
             coords: Some((1, 1, 1, 1)),
-            stockfish_ptr: Some(Box::new(MockStockfish {
-                version: "0.0".to_string(),
-                summary: None,
-            })),
+            mat: Some(Mat::default()),
             ..Default::default()
         };
-
         let state = AppState {
-            int_config: Arc::new(Mutex::new(IntConfig {
-                ..Default::default()
-            })),
+            int_config: Arc::new(Mutex::new(Default::default())),
             ext_config: Arc::new(Mutex::new(CheatessArgsDto {
                 monitor: Some(MonitorArgsDto {
                     name: Some("abc".to_string()),
                 }),
                 stockfish: Some(StockfishArgsDto {
                     pv: Some(3),
-                    elo: Some(10),
-                    skill: Some(5),
-                    hash: Some(1),
                     ..Default::default()
                 }),
                 proc_image: Some(ImgProcArgsDto {
@@ -535,5 +458,28 @@ mod tests {
             .assert_json(&serde_json::json!({"error":"Failed to crop board: Monitor not found"}));
     }
 
-    // TODO!: add tests for init_stockfish
+    #[tokio::test]
+    async fn init_stockfish_failed() {
+        // TODO
+    }
+
+    #[tokio::test]
+    async fn init_failed_with_detect_color() {
+        // TODO
+    }
+
+    #[tokio::test]
+    async fn init_failed_with_extract_pieces() {
+        // TODO
+    }
+
+    #[tokio::test]
+    async fn init_failed_with_stockfish_summary() {
+        // TODO?
+    }
+
+    #[tokio::test]
+    async fn init_200_with_correct_population() {
+        // TODO
+    }
 }

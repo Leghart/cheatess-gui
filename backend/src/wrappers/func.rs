@@ -6,11 +6,23 @@ use cheatess_core::stockfish::{Stockfish, Summary};
 use cheatess_core::utils::error::CheatessResult;
 use cheatess_core::utils::monitor::{self, Monitor};
 
+use crate::AppState;
+use crate::route::StockfishSummary;
+
+use axum::extract::State;
+use serde::{Deserialize, Serialize};
+
 use async_trait::async_trait;
 use std::collections::HashMap;
 
 #[cfg(test)]
 use cheatess_core::utils::error::CheatessError;
+
+#[derive(Deserialize, Serialize)]
+pub struct StockfishResponse {
+    pub version: String,
+    pub summary: Option<Vec<StockfishSummary>>,
+}
 
 pub trait StockfishLike: Send + Sync {
     fn get_version(&self) -> String;
@@ -41,7 +53,13 @@ pub trait FuncWrapper {
         threshold: f64,
         color: &Color,
     ) -> CheatessResult<HashMap<char, Mat>>;
-    fn init_stockfish(
+
+    async fn init_stockfish(
+        &self,
+        State(state): State<AppState>,
+    ) -> CheatessResult<StockfishResponse>;
+
+    fn _create_stockfish(
         &self,
         path: &std::path::PathBuf,
         depth: u8,
@@ -83,7 +101,44 @@ impl FuncWrapper for ProdFunc {
         get_board_region(board)
     }
 
-    fn init_stockfish(
+    async fn init_stockfish(
+        &self,
+        State(state): State<AppState>,
+    ) -> CheatessResult<StockfishResponse> {
+        let mut sf_guard = state.stockfish.lock().await;
+        let ext_config_guard = state.ext_config.lock().await;
+
+        let version: String;
+        if sf_guard.is_none() {
+            let path = std::path::PathBuf::from(std::env::var("ENGINE_PATH").unwrap());
+            let depth = 5;
+
+            let sf = state.funcs._create_stockfish(&path, depth).unwrap();
+            version = sf.get_version();
+            *sf_guard = Some(sf);
+        } else {
+            version = sf_guard.as_ref().unwrap().get_version();
+        }
+
+        let elo = ext_config_guard.stockfish.as_ref().unwrap().elo.unwrap();
+        let skill = ext_config_guard.stockfish.as_ref().unwrap().skill.unwrap();
+        let hash = ext_config_guard.stockfish.as_ref().unwrap().hash.unwrap();
+        let multi_lines = ext_config_guard.stockfish.as_ref().unwrap().pv.unwrap();
+
+        sf_guard.as_mut().unwrap().set_config(
+            &elo.to_string(),
+            &skill.to_string(),
+            &hash.to_string(),
+            &multi_lines.to_string(),
+        )?;
+
+        return Ok(StockfishResponse {
+            version,
+            summary: None,
+        });
+    }
+
+    fn _create_stockfish(
         &self,
         path: &std::path::PathBuf,
         depth: u8,
@@ -133,6 +188,7 @@ pub struct MockFunc {
     pub map: Option<HashMap<char, Mat>>,
     pub coords: Option<(u32, u32, u32, u32)>,
     pub stockfish_ptr: Option<Box<dyn StockfishLike>>,
+    pub init_stockfish_ok: bool,
 }
 
 #[cfg(test)]
@@ -146,6 +202,7 @@ impl MockFunc {
             map: None,
             coords: None,
             stockfish_ptr: None,
+            init_stockfish_ok: true,
         }
     }
 }
@@ -224,7 +281,17 @@ impl FuncWrapper for MockFunc {
         }
     }
 
-    fn init_stockfish(
+    async fn init_stockfish(&self, State(_): State<AppState>) -> CheatessResult<StockfishResponse> {
+        match self.init_stockfish_ok {
+            true => Ok(StockfishResponse {
+                version: "1".to_string(),
+                summary: None,
+            }),
+            false => Err(CheatessError::MonitorNotFound), //TODO
+        }
+    }
+
+    fn _create_stockfish(
         &self,
         _path: &std::path::PathBuf,
         _depth: u8,
@@ -235,5 +302,133 @@ impl FuncWrapper for MockFunc {
                 summary: None,
             }) as Box<dyn StockfishLike>
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::route::{AppState, IntConfig};
+    use crate::wrappers::args::CheatessArgsDto;
+    use crate::wrappers::{
+        args::{ImgProcArgsDto, MonitorArgsDto, StockfishArgsDto},
+        func::{MockFunc, MockStockfish},
+    };
+    use axum::extract::State;
+
+    use cheatess_core::procimg::Mat;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    #[tokio::test]
+    async fn init_stockfish_create_first_time() {
+        unsafe {
+            std::env::set_var("ENGINE_PATH", "./engine_path");
+        }
+
+        let funcs = MockFunc {
+            mat: Some(Mat::default()),
+            coords: Some((1, 1, 1, 1)),
+            stockfish_ptr: Some(Box::new(MockStockfish {
+                version: "0.0".to_string(),
+                summary: None,
+            })),
+            ..Default::default()
+        };
+
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(IntConfig {
+                ..Default::default()
+            })),
+            ext_config: Arc::new(Mutex::new(CheatessArgsDto {
+                monitor: Some(MonitorArgsDto {
+                    name: Some("abc".to_string()),
+                }),
+                stockfish: Some(StockfishArgsDto {
+                    pv: Some(3),
+                    elo: Some(10),
+                    skill: Some(5),
+                    hash: Some(1),
+                    ..Default::default()
+                }),
+                proc_image: Some(ImgProcArgsDto {
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+            stockfish: Arc::new(Mutex::new(Default::default())),
+            funcs: Arc::new(funcs),
+        };
+
+        assert!(state.stockfish.lock().await.is_none());
+        let result = ProdFunc.init_stockfish(State(state.clone())).await;
+
+        assert!(result.is_ok());
+        assert!(state.stockfish.lock().await.is_some())
+    }
+
+    #[tokio::test]
+    async fn init_stockfish_take_from_state() {
+        unsafe {
+            std::env::set_var("ENGINE_PATH", "./engine_path");
+        }
+
+        let funcs = MockFunc {
+            mat: Some(Mat::default()),
+            coords: Some((1, 1, 1, 1)),
+            ..Default::default()
+        };
+
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(IntConfig {
+                ..Default::default()
+            })),
+            ext_config: Arc::new(Mutex::new(CheatessArgsDto {
+                monitor: Some(MonitorArgsDto {
+                    name: Some("abc".to_string()),
+                }),
+                stockfish: Some(StockfishArgsDto {
+                    pv: Some(3),
+                    elo: Some(10),
+                    skill: Some(5),
+                    hash: Some(1),
+                    ..Default::default()
+                }),
+                proc_image: Some(ImgProcArgsDto {
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+            stockfish: Arc::new(Mutex::new(Some(Box::new(MockStockfish {
+                version: "1".to_string(),
+                summary: None,
+            })))),
+            funcs: Arc::new(funcs),
+        };
+
+        assert!(state.stockfish.lock().await.is_some());
+        let before = state
+            .stockfish
+            .lock()
+            .await
+            .as_ref()
+            .map(|b| &**b as *const _);
+
+        let result = ProdFunc.init_stockfish(State(state.clone())).await;
+        let after = state
+            .stockfish
+            .lock()
+            .await
+            .as_ref()
+            .map(|b| &**b as *const _);
+
+        assert!(result.is_ok());
+        assert!(state.stockfish.lock().await.is_some());
+        assert_eq!(before, after);
+    }
+
+    #[tokio::test]
+    async fn init_stockfish_set_config_failed() {
+        //TODO
     }
 }

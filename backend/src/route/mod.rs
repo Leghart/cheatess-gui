@@ -1,6 +1,6 @@
 pub mod http;
 pub mod ws;
-use cheatess_core::{core::engine::Color, core::stockfish::Stockfish, procimg::Mat};
+use cheatess_core::{core::engine::Color, procimg::Mat};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -24,13 +24,13 @@ pub struct AppState {
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct IntConfig {
-    coords: Option<(u32, u32, u32, u32)>,
-    prev_board: Option<[[char; 8]; 8]>,
-    color: Option<Color>,
+    pub coords: Option<(u32, u32, u32, u32)>,
+    pub prev_board: Option<[[char; 8]; 8]>,
+    pub color: Option<Color>,
     #[serde(skip)]
-    prev_board_mat: Option<Mat>,
+    pub prev_board_mat: Option<Mat>,
     #[serde(skip)]
-    pieces: Option<HashMap<char, Arc<Mat>>>,
+    pub pieces: Option<HashMap<char, Arc<Mat>>>,
 }
 
 impl IntConfig {
