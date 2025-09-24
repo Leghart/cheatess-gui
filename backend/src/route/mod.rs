@@ -1,28 +1,35 @@
 pub mod http;
 pub mod ws;
-use cheatess_core::{core::engine::Color, core::stockfish::Stockfish, procimg::Mat};
-use std::sync::Arc;
 
-use crate::wrappers::args;
+use cheatess_core::{core::engine::Color, procimg::Mat};
+
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::Mutex;
+
+use crate::interfaces::{FuncWrapper, StockfishLike};
+use crate::wrappers::args::CheatessArgsDto;
+
+pub type ExtConfig = CheatessArgsDto;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub stockfish: Arc<Mutex<Option<Stockfish>>>,
-    pub ext_config: Arc<Mutex<args::CheatessArgsDto>>,
+    pub stockfish: Arc<Mutex<Option<Box<dyn StockfishLike>>>>,
+    pub ext_config: Arc<Mutex<ExtConfig>>,
     pub int_config: Arc<Mutex<IntConfig>>,
+    pub funcs: Arc<dyn FuncWrapper + Send + Sync>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct IntConfig {
-    coords: Option<(u32, u32, u32, u32)>,
-    prev_board: Option<[[char; 8]; 8]>,
-    color: Option<Color>,
+    pub coords: Option<(u32, u32, u32, u32)>,
+    pub prev_board: Option<[[char; 8]; 8]>,
+    pub color: Option<Color>,
     #[serde(skip)]
-    prev_board_mat: Option<Mat>,
+    pub prev_board_mat: Option<Mat>,
     #[serde(skip)]
-    pieces: Option<std::collections::HashMap<char, Arc<Mat>>>,
+    pub pieces: Option<HashMap<char, Arc<Mat>>>,
 }
 
 impl IntConfig {
@@ -50,8 +57,14 @@ impl Clone for IntConfig {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct StockfishSummary {
     main_line: Vec<String>,
     evaluation: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct StockfishResponse {
+    pub version: String,
+    pub summary: Option<Vec<StockfishSummary>>,
 }

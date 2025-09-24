@@ -1,4 +1,5 @@
 use cheatess_core::utils::parser::{CheatessArgs, Mode};
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

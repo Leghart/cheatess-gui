@@ -1,17 +1,21 @@
-use axum::Router;
 use cheatess_core::utils::parser::parse_args_from;
 
+use axum::Router;
 use http::{Method, header::CONTENT_TYPE};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 
+mod interfaces;
 mod route;
 mod wrappers;
 
+#[cfg(test)]
+mod mocks;
+
 use route::{AppState, IntConfig};
-use wrappers::args;
+use wrappers::{args, func::ProdFunc};
 
 #[tokio::main]
 async fn main() {
@@ -52,6 +56,7 @@ async fn main() {
             stockfish: Arc::new(Mutex::new(None)),
             ext_config: Arc::new(Mutex::new(args::CheatessArgsDto::from(&args))),
             int_config: Arc::new(Mutex::new(IntConfig::new())),
+            funcs: Arc::new(ProdFunc),
         })
         .layer(cors);
 

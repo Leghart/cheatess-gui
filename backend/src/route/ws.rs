@@ -1,5 +1,6 @@
-use crate::AppState;
-use crate::wrappers;
+use cheatess_core::engine::Color;
+use cheatess_core::monitor::Monitor;
+
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::{Router, routing::any};
@@ -14,10 +15,8 @@ use futures_util::{
 use serde::{Deserialize, Serialize};
 use serde_json::{self, Value, json};
 
-use cheatess_core::engine::Color;
-use cheatess_core::monitor::Monitor;
-
 use super::StockfishSummary;
+use crate::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -94,7 +93,7 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
             player_color = int_config.color.unwrap();
 
             monitor_name = ext_config.monitor.as_ref().unwrap().name.clone();
-            monitor = match wrappers::func::get_monitor(monitor_name).await {
+            monitor = match state.funcs.get_monitor(monitor_name).await {
                 Ok(m) => m,
                 Err(e) => {
                     log::error!("Failed to get monitor: {e}");
@@ -213,7 +212,7 @@ async fn start_game(mut socket: WebSocket, State(state): State<AppState>) {
 
             {
                 let mut stockfish = state.stockfish.lock().await;
-                let summary = match stockfish.as_mut().unwrap().summary(pv) {
+                let summary = match stockfish.as_mut().unwrap().get_summary(pv) {
                     Ok(s) => s,
                     Err(e) => {
                         log::error!("Failed to get stockfish summary: {e}");
