@@ -81,7 +81,7 @@ async fn update_ext_config(
         }
         if let Some(pv) = stockfish.pv {
             s.pv = Some(pv);
-        }        
+        }
     }
     if let Some(proc_image) = partial.proc_image {
         let p = ext_config.proc_image.get_or_insert(Default::default());
