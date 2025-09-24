@@ -1,5 +1,5 @@
-use crate::route::{AppState, IntConfig};
-use crate::wrappers::{self, args::CheatessArgsDto};
+use cheatess_core::core::engine::{DefaultPrinter, create_board_default};
+
 use axum::{
     Json, Router,
     extract::State,
@@ -7,15 +7,13 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, patch, post},
 };
-use cheatess_core::core::{
-    engine::{DefaultPrinter, create_board_default},
-    procimg,
-};
 use serde::{Deserialize, Serialize};
 use serde_json::{self, json};
 use std::sync::Arc;
 
 use super::StockfishSummary;
+use crate::route::{AppState, IntConfig};
+use crate::wrappers::{self, args::CheatessArgsDto};
 
 #[derive(Deserialize, Serialize)]
 pub struct RawBoardResponse {
@@ -81,6 +79,9 @@ async fn update_ext_config(
         if let Some(hash) = stockfish.hash {
             s.hash = Some(hash);
         }
+        if let Some(pv) = stockfish.pv {
+            s.pv = Some(pv);
+        }        
     }
     if let Some(proc_image) = partial.proc_image {
         let p = ext_config.proc_image.get_or_insert(Default::default());
@@ -167,7 +168,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
     let sf_result = state.funcs.init_stockfish(State(state.clone())).await;
 
     if sf_result.is_err() {
-        let msg = format!("Init stockfish failed");
+        let msg = "Init stockfish failed".to_string();
         log::error!("{msg}");
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -188,7 +189,7 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
             );
         }
     };
-    let color = match procimg::detect_player_color(&board) {
+    let color = match state.funcs.detect_player_color(&board) {
         Ok(c) => c,
         Err(e) => {
             let msg = format!("Failed to detect player color: {e}");
@@ -212,8 +213,8 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
         .funcs
         .get_pieces(
             &board,
-            proc_img_args.margin.unwrap(),
-            proc_img_args.extract_piece_threshold.unwrap(),
+            proc_img_args.margin.unwrap(), //TODO: handle missing value
+            proc_img_args.extract_piece_threshold.unwrap(), //TODO: handle missing value
             &color,
         )
         .await
@@ -277,17 +278,18 @@ async fn init(State(state): State<AppState>) -> impl IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use crate::wrappers::{
-        args::{ImgProcArgsDto, MonitorArgsDto, StockfishArgsDto},
-        func::MockFunc,
-    };
+    use crate::mocks::{func::MockFunc, stockfish::MockStockfish};
+    use crate::wrappers::args::{EngineArgsDto, ImgProcArgsDto, MonitorArgsDto, StockfishArgsDto};
 
     use super::*;
     use axum_test::TestServer;
+    use cheatess_core::parser::Mode;
     use cheatess_core::{
         core::engine::{Color, DefaultPrinter, create_board_default},
         procimg::Mat,
+        stockfish::Summary,
     };
+    use std::collections::HashMap;
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -306,11 +308,10 @@ mod tests {
             funcs: Arc::new(MockFunc::default()),
         };
 
-        let app = router().with_state(state);
-
-        let server = TestServer::new(app).unwrap();
-
-        let response = server.get("/board").await;
+        let response = TestServer::new(router().with_state(state))
+            .unwrap()
+            .get("/board")
+            .await;
 
         response.assert_status_not_found();
         response.assert_text("");
@@ -332,11 +333,10 @@ mod tests {
             funcs: Arc::new(MockFunc::default()),
         };
 
-        let app = router().with_state(state);
-
-        let server = TestServer::new(app).unwrap();
-
-        let response = server.get("/board").await;
+        let response = TestServer::new(router().with_state(state))
+            .unwrap()
+            .get("/board")
+            .await;
 
         let output = [
             ["r", "n", "b", "q", "k", "b", "n", "r"],
@@ -373,11 +373,10 @@ mod tests {
             funcs: Arc::new(MockFunc::default()),
         };
 
-        let app = router().with_state(state);
-
-        let server = TestServer::new(app).unwrap();
-
-        let response = server.post("/init").await;
+        let response = TestServer::new(router().with_state(state))
+            .unwrap()
+            .post("/init")
+            .await;
 
         response.assert_status_internal_server_error();
         response.assert_json(
@@ -410,10 +409,10 @@ mod tests {
             funcs: Arc::new(funcs),
         };
 
-        let app = router().with_state(state);
-        let server = TestServer::new(app).unwrap();
-
-        let response = server.post("/init").await;
+        let response = TestServer::new(router().with_state(state))
+            .unwrap()
+            .post("/init")
+            .await;
 
         response.assert_status_internal_server_error();
         response.assert_json(
@@ -448,10 +447,10 @@ mod tests {
             funcs: Arc::new(funcs),
         };
 
-        let app = router().with_state(state);
-        let server = TestServer::new(app).unwrap();
-
-        let response = server.post("/init").await;
+        let response = TestServer::new(router().with_state(state))
+            .unwrap()
+            .post("/init")
+            .await;
 
         response.assert_status_internal_server_error();
         response
@@ -460,26 +459,353 @@ mod tests {
 
     #[tokio::test]
     async fn init_stockfish_failed() {
-        // TODO
+        let funcs = MockFunc {
+            init_stockfish_ok: false,
+            coords: Some((1, 1, 1, 1)),
+            mat: Some(Mat::default()),
+            ..Default::default()
+        };
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(Default::default())),
+            ext_config: Arc::new(Mutex::new(CheatessArgsDto {
+                monitor: Some(MonitorArgsDto {
+                    name: Some("abc".to_string()),
+                }),
+                stockfish: Some(StockfishArgsDto {
+                    pv: Some(3),
+                    ..Default::default()
+                }),
+                proc_image: Some(ImgProcArgsDto {
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+            stockfish: Arc::new(Mutex::new(Default::default())),
+            funcs: Arc::new(funcs),
+        };
+
+        let response = TestServer::new(router().with_state(state))
+            .unwrap()
+            .post("/init")
+            .await;
+
+        response.assert_status_internal_server_error();
+        response.assert_json(&serde_json::json!({"error":"Init stockfish failed"}));
     }
 
     #[tokio::test]
     async fn init_failed_with_detect_color() {
-        // TODO
+        let funcs = MockFunc {
+            init_stockfish_ok: true,
+            detect_color_ok: false,
+            coords: Some((1, 1, 1, 1)),
+            mat: Some(Mat::default()),
+            crop_mat: Some(Mat::default()),
+            ..Default::default()
+        };
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(Default::default())),
+            ext_config: Arc::new(Mutex::new(CheatessArgsDto {
+                monitor: Some(MonitorArgsDto {
+                    name: Some("abc".to_string()),
+                }),
+                stockfish: Some(StockfishArgsDto {
+                    pv: Some(3),
+                    ..Default::default()
+                }),
+                proc_image: Some(ImgProcArgsDto {
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+            stockfish: Arc::new(Mutex::new(Default::default())),
+            funcs: Arc::new(funcs),
+        };
+
+        let response = TestServer::new(router().with_state(state))
+            .unwrap()
+            .post("/init")
+            .await;
+
+        response.assert_status_internal_server_error();
+        response.assert_json(
+            &serde_json::json!({"error":"Failed to detect player color: Monitor not found"}),
+        );
     }
 
     #[tokio::test]
     async fn init_failed_with_extract_pieces() {
-        // TODO
+        let funcs = MockFunc {
+            init_stockfish_ok: true,
+            detect_color_ok: true,
+            coords: Some((1, 1, 1, 1)),
+            mat: Some(Mat::default()),
+            crop_mat: Some(Mat::default()),
+            ..Default::default()
+        };
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(Default::default())),
+            ext_config: Arc::new(Mutex::new(CheatessArgsDto {
+                monitor: Some(MonitorArgsDto {
+                    name: Some("abc".to_string()),
+                }),
+                stockfish: Some(StockfishArgsDto {
+                    pv: Some(3),
+                    ..Default::default()
+                }),
+                proc_image: Some(ImgProcArgsDto {
+                    margin: Some(1),
+                    extract_piece_threshold: Some(0.1),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+            stockfish: Arc::new(Mutex::new(Default::default())),
+            funcs: Arc::new(funcs),
+        };
+
+        let response = TestServer::new(router().with_state(state))
+            .unwrap()
+            .post("/init")
+            .await;
+
+        response.assert_status_internal_server_error();
+        response.assert_json(
+            &serde_json::json!({"error":"Failed to extract pieces: Monitor not found"}),
+        );
     }
 
     #[tokio::test]
     async fn init_failed_with_stockfish_summary() {
-        // TODO?
+        let funcs = MockFunc {
+            init_stockfish_ok: true,
+            detect_color_ok: true,
+            coords: Some((1, 1, 1, 1)),
+            mat: Some(Mat::default()),
+            crop_mat: Some(Mat::default()),
+            map: Some(HashMap::new()),
+            ..Default::default()
+        };
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(Default::default())),
+            ext_config: Arc::new(Mutex::new(CheatessArgsDto {
+                monitor: Some(MonitorArgsDto {
+                    name: Some("abc".to_string()),
+                }),
+                stockfish: Some(StockfishArgsDto {
+                    pv: Some(3),
+                    ..Default::default()
+                }),
+                proc_image: Some(ImgProcArgsDto {
+                    margin: Some(1),
+                    extract_piece_threshold: Some(0.1),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+            stockfish: Arc::new(Mutex::new(Some(Box::new(MockStockfish {
+                ..Default::default()
+            })))),
+            funcs: Arc::new(funcs),
+        };
+
+        let response = TestServer::new(router().with_state(state))
+            .unwrap()
+            .post("/init")
+            .await;
+
+        response.assert_status_internal_server_error();
+        response.assert_json(
+            &serde_json::json!({"error":"Failed to get stockfish summary: Detected no move"}),
+        );
     }
 
     #[tokio::test]
     async fn init_200_with_correct_population() {
-        // TODO
+        let funcs = MockFunc {
+            init_stockfish_ok: true,
+            detect_color_ok: true,
+            coords: Some((1, 1, 1, 1)),
+            mat: Some(Mat::default()),
+            crop_mat: Some(Mat::default()),
+            map: Some(HashMap::new()),
+            ..Default::default()
+        };
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(Default::default())),
+            ext_config: Arc::new(Mutex::new(CheatessArgsDto {
+                monitor: Some(MonitorArgsDto {
+                    name: Some("abc".to_string()),
+                }),
+                stockfish: Some(StockfishArgsDto {
+                    pv: Some(3),
+                    ..Default::default()
+                }),
+                proc_image: Some(ImgProcArgsDto {
+                    margin: Some(1),
+                    extract_piece_threshold: Some(0.1),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+            stockfish: Arc::new(Mutex::new(Some(Box::new(MockStockfish {
+                summary: Some(vec![Summary {
+                    eval: "+0.5".to_string(),
+                    main_line: vec!["e2e4".to_string()],
+                }]),
+                ..Default::default()
+            })))),
+            funcs: Arc::new(funcs),
+        };
+
+        let response = TestServer::new(router().with_state(state))
+            .unwrap()
+            .post("/init")
+            .await;
+
+        response.assert_status_ok();
+        response.assert_json(&serde_json::json!({
+            "int_config": {
+                "color": "White",
+                "coords": [1, 1, 1, 1],
+                "prev_board": [
+                    ["r", "n", "b", "q", "k", "b", "n", "r"],
+                    ["p", "p", "p", "p", "p", "p", "p", "p"],
+                    [" ", " ", " ", " ", " ", " ", " ", " "],
+                    [" ", " ", " ", " ", " ", " ", " ", " "],
+                    [" ", " ", " ", " ", " ", " ", " ", " "],
+                    [" ", " ", " ", " ", " ", " ", " ", " "],
+                    ["P", "P", "P", "P", "P", "P", "P", "P"],
+                    ["R", "N", "B", "Q", "K", "B", "N", "R"]
+                ]
+            },
+            "stockfish": {
+                "summary": [{
+                    "evaluation": "+0.5",
+                    "main_line": ["e2e4"]
+                }],
+                "version": "1"
+        }}));
+    }
+
+    #[tokio::test]
+    async fn update_ext_config_partial() {
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(IntConfig::default())),
+            ext_config: Arc::new(Mutex::new(Default::default())),
+            stockfish: Arc::new(Mutex::new(Default::default())),
+            funcs: Arc::new(MockFunc::default()),
+        };
+
+        let server = TestServer::new(router().with_state(state.clone())).unwrap();
+
+        let payload = wrappers::args::CheatessArgsDto {
+            verbose: Some("info".to_string()),
+            monitor: Some(wrappers::args::MonitorArgsDto {
+                name: Some("hdmi".to_string()),
+            }),
+            stockfish: Some(wrappers::args::StockfishArgsDto {
+                elo: Some(1200),
+                depth: Some(10),
+                ..Default::default()
+            }),
+            proc_image: Some(wrappers::args::ImgProcArgsDto {
+                margin: Some(5),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let response = server.patch("/ext_config").json(&payload).await;
+
+        response.assert_status_ok();
+        response.assert_json(&serde_json::json!({
+            "engine": null,
+            "mode": null,
+            "monitor": {
+                "name": "hdmi"
+            },
+            "proc_image": {
+                "board_threshold": null,
+                "difference_level": null,
+                "extract_piece_threshold": null,
+                "margin": 5,
+                "piece_threshold": null
+            },
+            "stockfish": {
+                "depth": 10,
+                "elo": 1200,
+                "hash": null,
+                "path": null,
+                "pv": null,
+                "skill": null
+            },
+            "verbose": "info"
+        }));
+    }
+
+    #[tokio::test]
+    async fn update_ext_config_full() {
+        let state = AppState {
+            int_config: Arc::new(Mutex::new(IntConfig::default())),
+            ext_config: Arc::new(Mutex::new(Default::default())),
+            stockfish: Arc::new(Mutex::new(Default::default())),
+            funcs: Arc::new(MockFunc::default()),
+        };
+
+        let server = TestServer::new(router().with_state(state.clone())).unwrap();
+
+        let payload = CheatessArgsDto {
+            verbose: Some("debug".to_string()),
+            mode: Some(Mode::Game),
+            monitor: Some(MonitorArgsDto {
+                name: Some("hdmi".to_string()),
+            }),
+            stockfish: Some(StockfishArgsDto {
+                path: Some("path".to_string()),
+                elo: Some(1500),
+                skill: Some(20),
+                depth: Some(15),
+                hash: Some(1024),
+                pv: Some(3),
+            }),
+            proc_image: Some(ImgProcArgsDto {
+                margin: Some(4),
+                piece_threshold: Some(0.5),
+                extract_piece_threshold: Some(0.7),
+                board_threshold: Some(0.3),
+                difference_level: Some(10),
+            }),
+            engine: Some(EngineArgsDto { pretty: Some(true) }),
+        };
+
+        let response = server.patch("/ext_config").json(&payload).await;
+
+        response.assert_status_ok();
+        response.assert_json(&serde_json::json!({
+            "verbose": "debug",
+            "mode": "Game",
+            "monitor": {
+                "name": "hdmi"
+            },
+            "stockfish": {
+                "path": "path",
+                "elo": 1500,
+                "skill": 20,
+                "depth": 15,
+                "hash": 1024,
+                "pv": 3
+            },
+            "proc_image": {
+                "margin": 4,
+                "piece_threshold": 0.5,
+                "extract_piece_threshold": 0.7,
+                "board_threshold": 0.3,
+                "difference_level": 10
+            },
+            "engine": {
+                "pretty": true
+            }
+        }));
     }
 }

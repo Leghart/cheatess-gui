@@ -1,16 +1,15 @@
 pub mod http;
 pub mod ws;
+
 use cheatess_core::{core::engine::Color, procimg::Mat};
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-
-use crate::wrappers::{
-    args::CheatessArgsDto,
-    func::{FuncWrapper, StockfishLike},
-};
-use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+
+use crate::interfaces::{FuncWrapper, StockfishLike};
+use crate::wrappers::args::CheatessArgsDto;
 
 pub type ExtConfig = CheatessArgsDto;
 
@@ -58,8 +57,14 @@ impl Clone for IntConfig {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct StockfishSummary {
     main_line: Vec<String>,
     evaluation: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct StockfishResponse {
+    pub version: String,
+    pub summary: Option<Vec<StockfishSummary>>,
 }

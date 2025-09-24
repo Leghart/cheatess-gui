@@ -1,4 +1,6 @@
-use crate::AppState;
+use cheatess_core::engine::Color;
+use cheatess_core::monitor::Monitor;
+
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::{Router, routing::any};
@@ -13,10 +15,8 @@ use futures_util::{
 use serde::{Deserialize, Serialize};
 use serde_json::{self, Value, json};
 
-use cheatess_core::engine::Color;
-use cheatess_core::monitor::Monitor;
-
 use super::StockfishSummary;
+use crate::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()

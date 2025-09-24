@@ -1,19 +1,21 @@
-use axum::Router;
 use cheatess_core::utils::parser::parse_args_from;
 
+use axum::Router;
 use http::{Method, header::CONTENT_TYPE};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 
+mod interfaces;
 mod route;
 mod wrappers;
 
-use route::{AppState, IntConfig};
-use wrappers::args;
+#[cfg(test)]
+mod mocks;
 
-use crate::wrappers::func::ProdFunc;
+use route::{AppState, IntConfig};
+use wrappers::{args, func::ProdFunc};
 
 #[tokio::main]
 async fn main() {
