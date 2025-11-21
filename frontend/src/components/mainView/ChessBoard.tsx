@@ -26,7 +26,11 @@ function ChessBoard({ firstMove, currentPosition }: Props) {
         >
           {currentPosition[row][col].figureType !== " " && (
             <img
-              style={{ margin: "auto" }}
+              style={{
+                margin: "auto",
+                width: "100%",
+                height: "100%",
+              }}
               src={`src/assets/pieces/${currentPosition[row][col].figureType}.png`}
             ></img>
           )}
@@ -102,8 +106,8 @@ function ChessBoard({ firstMove, currentPosition }: Props) {
 
   return (
     <div className="chessBoardWrapper">
+      {createCoordinates()}
       <Table className="chessBoard" style={{ width: "800px" }}>
-        {createCoordinates()}
         <TableBody>{createBody()}</TableBody>
       </Table>
     </div>

@@ -45,35 +45,46 @@ function GameView() {
       hasLoaded.current = true;
 
       api
-        .post<InitTypes>("http://localhost:3000/init", "")
+        .post<InitTypes>("http://127.0.0.1:3000/init", "")
         .then((data) => {
           setFirstColorMove(data.int_config.color);
           setCurrentPosition(
             addFieldColorToPosition(data.int_config.prev_board) ?? []
           );
 
-          setMoves((prevMoves) => [...prevMoves, data.stockfish.best_move]);
+          setMoves((prevMoves) => [
+            ...prevMoves,
+            data.stockfish.summary[0].main_line[0],
+          ]);
         })
         .catch((err) => {
           console.error(err);
         });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    const socket = new WebSocket("ws://127.0.0.1:3000/game");
+    setTimeout(() => {
+      const socket = new WebSocket("ws://127.0.0.1:3000/game");
 
-    // Listen for messages
-    socket.addEventListener("message", (event: { data: string }) => {
-      const data: WebSocketData = JSON.parse(event.data) as WebSocketData;
+      // Listen for messages
+      socket.addEventListener("message", (event: { data: string }) => {
+        const data: WebSocketData = JSON.parse(event.data) as WebSocketData;
 
-      setCurrentPosition(
-        addFieldColorToPosition(data.NextMove.raw_board) ?? []
-      );
-      setMoves((prevMoves) => [...prevMoves, data.NextMove.best_move]);
-    });
+        setCurrentPosition(
+          addFieldColorToPosition(data.NextMove.raw_board) ?? []
+        );
+        setMoves((prevMoves) => [
+          ...prevMoves,
+          data.NextMove.summary[0].main_line[0],
+        ]);
+      });
 
-    return () => socket.close();
+      return () => socket.close();
+    }, 1000);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -87,7 +98,11 @@ function GameView() {
         )}
       </div>
       <div style={{ width: "20%" }}>
-        <LastMovesSideBar firstColorMove={firstColorMove} moves={moves} />
+        <LastMovesSideBar
+          firstColorMove={firstColorMove}
+          moves={moves}
+          currentPosition={currentPosition}
+        />
       </div>
     </div>
   );
