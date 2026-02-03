@@ -58,7 +58,13 @@ function LastMovesSideBar({ firstColorMove, moves, currentPosition }: Props) {
   };
 
   return (
-    <div style={{ border: "1px dashed black", color: "white" }}>
+    <div
+      style={{
+        border: "1px dashed black",
+        color: "white",
+        backgroundColor: "#4e4944",
+      }}
+    >
       <h2 style={{ marginBottom: "16px" }}> Table of top last moves</h2>
       <Table>
         <TableHeader>

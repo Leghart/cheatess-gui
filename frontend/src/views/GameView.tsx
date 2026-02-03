@@ -64,33 +64,33 @@ function GameView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    setTimeout(() => {
-      const socket = new WebSocket("ws://127.0.0.1:3000/game");
+  // useEffect(() => {
+  //   setTimeout(() => {
+  //     const socket = new WebSocket("ws://127.0.0.1:3000/game");
 
-      // Listen for messages
-      socket.addEventListener("message", (event: { data: string }) => {
-        const data: WebSocketData = JSON.parse(event.data) as WebSocketData;
+  //     // Listen for messages
+  //     socket.addEventListener("message", (event: { data: string }) => {
+  //       const data: WebSocketData = JSON.parse(event.data) as WebSocketData;
 
-        setCurrentPosition(
-          addFieldColorToPosition(data.NextMove.raw_board) ?? []
-        );
-        setMoves((prevMoves) => [
-          ...prevMoves,
-          data.NextMove.summary[0].main_line[0],
-        ]);
-      });
+  //       setCurrentPosition(
+  //         addFieldColorToPosition(data.NextMove.raw_board) ?? []
+  //       );
+  //       setMoves((prevMoves) => [
+  //         ...prevMoves,
+  //         data.NextMove.summary[0].main_line[0],
+  //       ]);
+  //     });
 
-      return () => socket.close();
-    }, 1000);
+  //     return () => socket.close();
+  //   }, 1000);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, []);
 
   return (
     <div style={{ display: "flex" }}>
       <div style={{ width: "80%" }}>
-        {currentPosition.length && (
+        {currentPosition.length > 0 && (
           <ChessBoard
             firstMove={firstColorMove}
             currentPosition={currentPosition}
