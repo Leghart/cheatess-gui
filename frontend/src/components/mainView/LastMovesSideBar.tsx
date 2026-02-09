@@ -45,7 +45,10 @@ function LastMovesSideBar({ firstColorMove, moves, currentPosition }: Props) {
   const showPieceToMove = (indexes: Array<number>): React.JSX.Element => {
     const [row, col] = indexes;
 
-    if (currentPosition[row][col].figureType) {
+    if (
+      currentPosition[row][col].figureType &&
+      currentPosition[row][col].figureType !== " "
+    ) {
       return (
         <img
           style={{ marginRight: "5px", width: "15px", height: "15px" }}

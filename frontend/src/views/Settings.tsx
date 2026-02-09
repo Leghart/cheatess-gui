@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { SettingsType } from "@/types/RequestTypes";
+import api from "@/services/api";
 
 function Settings() {
   const [isStockfishSettingsOpen, setStockfishOpen] = useState(false);
@@ -35,22 +36,17 @@ function Settings() {
 
   const [formData, setFormData] = useState<SettingsType>({});
 
-  function test(e: FormEvent): void {
-    // const requestData: Partial<SettingsType> = {};
+  function sendForm(e: FormEvent): void {
     e.preventDefault();
 
-    // const form = e.target;
-    // const formData = new FormData(form);
-
-    // formData.forEach((value, key) => {
-    //   if (key === "pretty") {
-    //     requestData[key] = value === "true";
-    //   } else {
-    //     requestData[key] = value;
-    //   }
-    // });
-
-    console.log(formData);
+    api
+      .patch("http://127.0.0.1:3000/ext_config", formData)
+      .then((response) => {
+        console.log("Settings saved:", response.data);
+      })
+      .catch((error) => {
+        console.error("Error saving settings:", error);
+      });
   }
 
   return (
@@ -65,7 +61,7 @@ function Settings() {
         onInteractOutside={(e) => e.preventDefault()}
         style={{ maxHeight: "80vh", overflowY: "scroll" }}
       >
-        <form onSubmit={test}>
+        <form onSubmit={sendForm}>
           <DialogHeader className="mb-4">
             <DialogTitle>Cheatess settings</DialogTitle>
             <DialogDescription>

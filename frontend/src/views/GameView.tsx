@@ -4,7 +4,11 @@ import api from "@/services/api";
 import type { InitTypes, WebSocketData } from "@/types/RequestTypes";
 import { useEffect, useState, useRef } from "react";
 
-function GameView() {
+interface Props {
+  startGame: boolean;
+}
+
+function GameView({ startGame }: Props) {
   const hasLoaded = useRef(false);
   const [firstColorMove, setFirstColorMove] = useState("white");
 
@@ -41,7 +45,7 @@ function GameView() {
   const [moves, setMoves] = useState<Array<string>>([]);
 
   useEffect(() => {
-    if (!hasLoaded.current) {
+    if (!hasLoaded.current && startGame) {
       hasLoaded.current = true;
 
       api
@@ -62,30 +66,32 @@ function GameView() {
         });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [startGame]);
 
-  // useEffect(() => {
-  //   setTimeout(() => {
-  //     const socket = new WebSocket("ws://127.0.0.1:3000/game");
+  useEffect(() => {
+    if (startGame) {
+      setTimeout(() => {
+        const socket = new WebSocket("ws://127.0.0.1:3000/game");
 
-  //     // Listen for messages
-  //     socket.addEventListener("message", (event: { data: string }) => {
-  //       const data: WebSocketData = JSON.parse(event.data) as WebSocketData;
+        // Listen for messages
+        socket.addEventListener("message", (event: { data: string }) => {
+          const data: WebSocketData = JSON.parse(event.data) as WebSocketData;
 
-  //       setCurrentPosition(
-  //         addFieldColorToPosition(data.NextMove.raw_board) ?? []
-  //       );
-  //       setMoves((prevMoves) => [
-  //         ...prevMoves,
-  //         data.NextMove.summary[0].main_line[0],
-  //       ]);
-  //     });
+          setCurrentPosition(
+            addFieldColorToPosition(data.NextMove.raw_board) ?? []
+          );
+          setMoves((prevMoves) => [
+            ...prevMoves,
+            data.NextMove.summary[0].main_line[0],
+          ]);
+        });
 
-  //     return () => socket.close();
-  //   }, 1000);
+        return () => socket.close();
+      }, 1000);
+    }
 
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startGame]);
 
   return (
     <div style={{ display: "flex" }}>
