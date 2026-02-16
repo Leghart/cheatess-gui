@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChevronsUpDown } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Select,
   SelectContent,
@@ -48,6 +48,20 @@ function Settings() {
         console.error("Error saving settings:", error);
       });
   }
+
+  useEffect(() => {
+    api
+      .get("http://127.0.0.1:3000/ext_config")
+      .then((response) => {
+        setFormData((prevData: SettingsType) => ({
+          ...prevData,
+          ...response,
+        }));
+      })
+      .catch((error) => {
+        console.error("Error fetching settings:", error);
+      });
+  }, []);
 
   return (
     <Dialog>

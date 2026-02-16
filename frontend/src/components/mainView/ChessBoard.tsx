@@ -57,7 +57,7 @@ function ChessBoard({ firstMove, currentPosition }: Props) {
       numbers: { x: 2, y: 720 },
     };
 
-    if (firstMove !== "white") {
+    if (firstMove !== "White") {
       startPosition.letters = { x: 785, y: 795 };
       startPosition.numbers = { x: 2, y: 20 };
     }
@@ -76,11 +76,11 @@ function ChessBoard({ firstMove, currentPosition }: Props) {
       [8, "h"],
     ].forEach(([num, letter], index) => {
       const calcNumY =
-        firstMove === "white"
+        firstMove === "White"
           ? startPosition.numbers.y - 100 * index
           : startPosition.numbers.y + 100 * index;
       const calcLetX =
-        firstMove === "white"
+        firstMove === "White"
           ? startPosition.letters.x + 100 * index
           : startPosition.letters.x - 100 * index;
 

@@ -51,6 +51,7 @@ function GameView({ startGame }: Props) {
       api
         .post<InitTypes>("http://127.0.0.1:3000/init", "")
         .then((data) => {
+          console.log(data);
           setFirstColorMove(data.int_config.color);
           setCurrentPosition(
             addFieldColorToPosition(data.int_config.prev_board) ?? []
