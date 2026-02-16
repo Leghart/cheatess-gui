@@ -35,7 +35,7 @@ function LastMovesSideBar({ firstColorMove, moves, currentPosition }: Props) {
 
     const letter = letterMap[move.charAt(0) as keyof typeof letterMap];
     const number =
-      firstColorMove === "white"
+      firstColorMove === "White"
         ? Math.abs(parseInt(move.charAt(1)) - 8)
         : parseInt(move.charAt(1));
 
@@ -45,7 +45,10 @@ function LastMovesSideBar({ firstColorMove, moves, currentPosition }: Props) {
   const showPieceToMove = (indexes: Array<number>): React.JSX.Element => {
     const [row, col] = indexes;
 
-    if (currentPosition[row][col].figureType) {
+    if (
+      currentPosition[row][col].figureType &&
+      currentPosition[row][col].figureType !== " "
+    ) {
       return (
         <img
           style={{ marginRight: "5px", width: "15px", height: "15px" }}
@@ -58,7 +61,13 @@ function LastMovesSideBar({ firstColorMove, moves, currentPosition }: Props) {
   };
 
   return (
-    <div style={{ border: "1px dashed black", color: "white" }}>
+    <div
+      style={{
+        border: "1px dashed black",
+        color: "white",
+        backgroundColor: "#4e4944",
+      }}
+    >
       <h2 style={{ marginBottom: "16px" }}> Table of top last moves</h2>
       <Table>
         <TableHeader>
@@ -66,7 +75,7 @@ function LastMovesSideBar({ firstColorMove, moves, currentPosition }: Props) {
             <TableHead className="w-[20px] text-center">Move</TableHead>
             <TableHead className="text-center">{firstColorMove}</TableHead>
             <TableHead className="text-center">
-              {firstColorMove === "white" ? "black" : "white"}
+              {firstColorMove === "White" ? "Black" : "White"}
             </TableHead>
           </TableRow>
         </TableHeader>
